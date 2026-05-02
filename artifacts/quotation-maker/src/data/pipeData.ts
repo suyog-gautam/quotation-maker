@@ -1,5 +1,4 @@
 export type PNRating =
-  | "5 PN"
   | "6 PN"
   | "8 PN"
   | "10 PN"
@@ -15,7 +14,6 @@ export interface PipeSpec {
 }
 
 export const PN_RATINGS: PNRating[] = [
-  "5 PN",
   "6 PN",
   "8 PN",
   "10 PN",
