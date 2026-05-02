@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "PE Pipe Quotation Maker"
+version = "1.0.0"
+id = "artifacts/quotation-maker"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 22742
+
+[services.development]
+run = "pnpm --filter @workspace/quotation-maker run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/quotation-maker", "run", "build" ]
+publicDir = "artifacts/quotation-maker/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "22742"
+BASE_PATH = "/"
