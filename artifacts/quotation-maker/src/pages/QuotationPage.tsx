@@ -257,7 +257,6 @@ function buildPrintHTML(
       <div class="grand"><span>Grand Total (incl. VAT)</span><span>Rs. ${formatNum(totalWithVat)}</span></div>
     </div>
   </div>
-  <div class="note">* Prices are subject to change without prior notice. Valid for 30 days.</div>
   <script>window.onload=()=>{ window.print(); }</script>
 </body>
 </html>`;
@@ -284,11 +283,19 @@ function exportExcel(
   //   ...
   //   Sub Total / VAT / Grand Total rows
 
-  const RATE_ROW = 6; // 1-indexed Excel row for rate per kg  (row index 5)
-  const HEADER_ROW = 8; // 1-indexed Excel row for column headers (row index 7)
-  const DATA_START_ROW = 9; // 1-indexed first data row (row index 8)
+  // Column layout:
+  //   A: S.N
+  //   B: Item Description
+  //   C: Qty (m)          — editable
+  //   D: Rate/m (Rs.)     — formula: G{row} * $B$RATE_ROW
+  //   E: Amount (Rs.)     — formula: C{row} * D{row}
+  //   F: (blank gap)
+  //   G: Avg Wt (kg/m)   — editable, drives Rate/m
 
-  const aoa: (string | number)[][] = [
+  const RATE_ROW = 6; // 1-indexed Excel row for rate per kg
+  const DATA_START_ROW = 9; // 1-indexed first data row
+
+  const aoa: (string | number | null)[][] = [
     [header.title],
     [header.subtitle],
     [header.note],
@@ -296,19 +303,18 @@ function exportExcel(
     [],
     ["Rate per kg (Rs.)", rateKg],
     [],
-    ["S.N", "Item Description", "Size", "PN Rating", "Avg Wt (kg/m)", "Qty (m)", "Rate/m (Rs.)", "Amount (Rs.)"],
+    ["S.N", "Item Description", "Qty (m)", "Rate/m (Rs.)", "Amount (Rs.)", "", "Avg Wt (kg/m)"],
   ];
 
   items.forEach((item, i) => {
     aoa.push([
       i + 1,
       `${item.dnLabel} ${item.pn} PE Pipe`,
-      item.dnLabel,
-      item.pn,
-      item.avgWeight,
       item.quantity,
-      0, // placeholder — formula set below
-      0, // placeholder — formula set below
+      0,           // placeholder — formula set below (Rate/m)
+      0,           // placeholder — formula set below (Amount)
+      null,        // blank gap column
+      item.avgWeight,
     ]);
   });
 
@@ -316,47 +322,47 @@ function exportExcel(
   const vatRow = subTotalRow + 1;
   const grandRow = vatRow + 1;
 
-  aoa.push([]); // spacing
-  aoa.push(["", "", "", "", "", "", "Sub Total", 0]);
-  aoa.push(["", "", "", "", "", "", "VAT (13%)", 0]);
-  aoa.push(["", "", "", "", "", "", "Grand Total (incl. VAT)", 0]);
+  aoa.push([]);
+  aoa.push(["", "", "", "Sub Total", 0]);
+  aoa.push(["", "", "", "VAT (13%)", 0]);
+  aoa.push(["", "", "", "Grand Total (incl. VAT)", 0]);
 
   const ws = XLSX.utils.aoa_to_sheet(aoa);
 
   // Set formulas for each item row
   items.forEach((_, i) => {
-    const excelRow = DATA_START_ROW + i;
-    const eIdx = XLSX.utils.encode_cell;
-    // Rate/m (col G, index 6) = Avg Wt (E) × Rate/kg ($B$6)
-    ws[eIdx({ r: excelRow - 1, c: 6 })] = { t: "n", f: `E${excelRow}*$B$${RATE_ROW}` };
-    // Amount (col H, index 7) = Qty (F) × Rate/m (G)
-    ws[eIdx({ r: excelRow - 1, c: 7 })] = { t: "n", f: `F${excelRow}*G${excelRow}` };
+    const r = DATA_START_ROW + i;
+    const ec = XLSX.utils.encode_cell;
+    // Rate/m (col D, index 3) = Avg Wt (G{r}) × Rate/kg ($B$RATE_ROW)
+    ws[ec({ r: r - 1, c: 3 })] = { t: "n", f: `G${r}*$B$${RATE_ROW}` };
+    // Amount (col E, index 4) = Qty (C{r}) × Rate/m (D{r})
+    ws[ec({ r: r - 1, c: 4 })] = { t: "n", f: `C${r}*D${r}` };
   });
 
-  // Sub Total: SUM of Amount column from data rows
+  // Totals in column E
   if (items.length > 0) {
-    const amtRange = `H${DATA_START_ROW}:H${DATA_START_ROW + items.length - 1}`;
-    ws[XLSX.utils.encode_cell({ r: subTotalRow - 1, c: 7 })] = { t: "n", f: `SUM(${amtRange})` };
-    ws[XLSX.utils.encode_cell({ r: vatRow - 1, c: 7 })] = { t: "n", f: `H${subTotalRow}*0.13` };
-    ws[XLSX.utils.encode_cell({ r: grandRow - 1, c: 7 })] = { t: "n", f: `H${subTotalRow}+H${vatRow}` };
+    const amtRange = `E${DATA_START_ROW}:E${DATA_START_ROW + items.length - 1}`;
+    const ec = XLSX.utils.encode_cell;
+    ws[ec({ r: subTotalRow - 1, c: 4 })] = { t: "n", f: `SUM(${amtRange})` };
+    ws[ec({ r: vatRow - 1, c: 4 })]      = { t: "n", f: `E${subTotalRow}*0.13` };
+    ws[ec({ r: grandRow - 1, c: 4 })]    = { t: "n", f: `E${subTotalRow}+E${vatRow}` };
   }
 
   // Column widths
   ws["!cols"] = [
-    { wch: 5 },  // S.N
-    { wch: 32 }, // Description
-    { wch: 10 }, // Size
-    { wch: 10 }, // PN
-    { wch: 14 }, // Avg Wt
-    { wch: 10 }, // Qty
-    { wch: 15 }, // Rate/m
-    { wch: 16 }, // Amount
+    { wch: 5 },  // A: S.N
+    { wch: 34 }, // B: Item Description
+    { wch: 11 }, // C: Qty
+    { wch: 16 }, // D: Rate/m
+    { wch: 17 }, // E: Amount
+    { wch: 4 },  // F: gap
+    { wch: 14 }, // G: Avg Wt
   ];
 
-  // Set sheet range
+  // Set sheet range (cols A–G = indices 0–6)
   ws["!ref"] = XLSX.utils.encode_range({
     s: { r: 0, c: 0 },
-    e: { r: grandRow, c: 7 },
+    e: { r: grandRow, c: 6 },
   });
 
   XLSX.utils.book_append_sheet(wb, ws, "Quotation");
@@ -1018,9 +1024,6 @@ export default function QuotationPage() {
                 </div>
               </div>
 
-              <p className="text-xs text-slate-400 text-center">
-                * Prices are subject to change without prior notice. This quotation is valid for 30 days.
-              </p>
             </div>
           </div>
         </div>
