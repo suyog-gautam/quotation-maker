@@ -322,7 +322,6 @@ function exportExcel(
   const vatRow = subTotalRow + 1;
   const grandRow = vatRow + 1;
 
-  aoa.push([]);
   aoa.push(["", "", "", "Sub Total", 0]);
   aoa.push(["", "", "", "VAT (13%)", 0]);
   aoa.push(["", "", "", "Grand Total (incl. VAT)", 0]);
