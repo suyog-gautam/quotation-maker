@@ -1,7 +1,8 @@
 export type PNRating = "6 PN" | "8 PN" | "10 PN" | "12.5 PN" | "16 PN" | "20 PN";
 
 export interface PipeSpec {
-  size: string;
+  dnLabel: string;
+  dnMm: number;
   outsideDia: string;
   avgWeights: Partial<Record<PNRating, number>>;
 }
@@ -10,7 +11,8 @@ export const PN_RATINGS: PNRating[] = ["6 PN", "8 PN", "10 PN", "12.5 PN", "16 P
 
 export const PIPE_DATA: PipeSpec[] = [
   {
-    size: '1/2"',
+    dnLabel: "16mm",
+    dnMm: 16,
     outsideDia: "16",
     avgWeights: {
       "6 PN": 0.066,
@@ -22,7 +24,8 @@ export const PIPE_DATA: PipeSpec[] = [
     },
   },
   {
-    size: '3/4"',
+    dnLabel: "20mm",
+    dnMm: 20,
     outsideDia: "20",
     avgWeights: {
       "6 PN": 0.104,
@@ -34,7 +37,8 @@ export const PIPE_DATA: PipeSpec[] = [
     },
   },
   {
-    size: '1"',
+    dnLabel: "25mm",
+    dnMm: 25,
     outsideDia: "25",
     avgWeights: {
       "6 PN": 0.141,
@@ -46,7 +50,8 @@ export const PIPE_DATA: PipeSpec[] = [
     },
   },
   {
-    size: '1 1/4"',
+    dnLabel: "32mm",
+    dnMm: 32,
     outsideDia: "32",
     avgWeights: {
       "6 PN": 0.233,
@@ -58,7 +63,8 @@ export const PIPE_DATA: PipeSpec[] = [
     },
   },
   {
-    size: '1 1/2"',
+    dnLabel: "40mm",
+    dnMm: 40,
     outsideDia: "40",
     avgWeights: {
       "6 PN": 0.363,
@@ -70,7 +76,8 @@ export const PIPE_DATA: PipeSpec[] = [
     },
   },
   {
-    size: '2"',
+    dnLabel: "50mm",
+    dnMm: 50,
     outsideDia: "50",
     avgWeights: {
       "6 PN": 0.573,
@@ -82,7 +89,8 @@ export const PIPE_DATA: PipeSpec[] = [
     },
   },
   {
-    size: '2 1/2"',
+    dnLabel: "63mm",
+    dnMm: 63,
     outsideDia: "63",
     avgWeights: {
       "6 PN": 0.821,
@@ -94,7 +102,8 @@ export const PIPE_DATA: PipeSpec[] = [
     },
   },
   {
-    size: '3"',
+    dnLabel: "75mm",
+    dnMm: 75,
     outsideDia: "75",
     avgWeights: {
       "6 PN": 0.821,
@@ -106,7 +115,8 @@ export const PIPE_DATA: PipeSpec[] = [
     },
   },
   {
-    size: '4"',
+    dnLabel: "90mm",
+    dnMm: 90,
     outsideDia: "90",
     avgWeights: {
       "6 PN": 1.437,
@@ -118,7 +128,8 @@ export const PIPE_DATA: PipeSpec[] = [
     },
   },
   {
-    size: '5"',
+    dnLabel: "110mm",
+    dnMm: 110,
     outsideDia: "110",
     avgWeights: {
       "6 PN": 2.349,
@@ -130,7 +141,8 @@ export const PIPE_DATA: PipeSpec[] = [
     },
   },
   {
-    size: '6"',
+    dnLabel: "125mm",
+    dnMm: 125,
     outsideDia: "125",
     avgWeights: {
       "6 PN": 2.826,
@@ -142,7 +154,8 @@ export const PIPE_DATA: PipeSpec[] = [
     },
   },
   {
-    size: '8"',
+    dnLabel: "140mm",
+    dnMm: 140,
     outsideDia: "140",
     avgWeights: {
       "6 PN": 3.706,
@@ -154,7 +167,8 @@ export const PIPE_DATA: PipeSpec[] = [
     },
   },
   {
-    size: '10"',
+    dnLabel: "160mm",
+    dnMm: 160,
     outsideDia: "160",
     avgWeights: {
       "6 PN": 4.599,
@@ -166,8 +180,9 @@ export const PIPE_DATA: PipeSpec[] = [
     },
   },
   {
-    size: '12"',
-    outsideDia: '180 DN 6"',
+    dnLabel: "180mm",
+    dnMm: 180,
+    outsideDia: "180",
     avgWeights: {
       "6 PN": 4.682,
       "8 PN": 5.77,
@@ -179,9 +194,15 @@ export const PIPE_DATA: PipeSpec[] = [
   },
 ];
 
-export function getAvgWeight(size: string, pn: PNRating): number | undefined {
-  const spec = PIPE_DATA.find((p) => p.size === size);
+export function getAvgWeight(dnLabel: string, pn: PNRating): number | undefined {
+  const spec = PIPE_DATA.find((p) => p.dnLabel === dnLabel);
   return spec?.avgWeights[pn];
 }
 
-export const PIPE_SIZES = PIPE_DATA.map((p) => p.size);
+export function getAvailablePNs(dnLabel: string): PNRating[] {
+  const spec = PIPE_DATA.find((p) => p.dnLabel === dnLabel);
+  if (!spec) return [];
+  return PN_RATINGS.filter((pn) => spec.avgWeights[pn] !== undefined);
+}
+
+export const PIPE_SIZES = PIPE_DATA.map((p) => p.dnLabel);
