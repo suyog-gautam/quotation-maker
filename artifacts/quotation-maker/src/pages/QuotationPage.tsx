@@ -375,9 +375,9 @@ export default function QuotationPage() {
   const downloadBtnRef = useRef<HTMLDivElement>(null);
 
   const [header, setHeader] = useState<QuotationHeader>({
-    title: "QUOTATION",
-    subtitle: "PE Pipe — Manufactured as per ISO 2081",
-    note: "Effective from Sharaban 01, 2081",
+    title: "Ashirwad Pipe Industries Pvt Ltd",
+    subtitle: "Bharatpur-15, Chitwan",
+    note: "",
     date: todayString(),
   });
   const [editingHeaderField, setEditingHeaderField] = useState<keyof QuotationHeader | null>(null);
@@ -491,8 +491,8 @@ export default function QuotationPage() {
   };
 
   const headerFieldLabel: Record<keyof QuotationHeader, string> = {
-    title: "Document Title",
-    subtitle: "Subtitle / Description",
+    title: "Title",
+    subtitle: "Address",
     note: "Effective Date Note",
     date: "Quotation Date",
   };
