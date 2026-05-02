@@ -1,7 +1,16 @@
-import { useState, useRef, useCallback } from "react";
-import { Plus, Trash2, FileText, Printer, X, ChevronDown, Pencil, Check } from "lucide-react";
-import { PIPE_DATA, PIPE_SIZES, PN_RATINGS, getAvgWeight, getAvailablePNs, type PNRating } from "@/data/pipeData";
+import { useState, useRef, useCallback, useEffect } from "react";
+import * as XLSX from "xlsx";
+import {
+  Plus, Trash2, FileText, Printer, X, ChevronDown,
+  Pencil, Check, Download, FileSpreadsheet, FileDown,
+} from "lucide-react";
+import {
+  PIPE_DATA, PIPE_SIZES, PN_RATINGS, getAvgWeight,
+  getAvailablePNs, type PNRating,
+} from "@/data/pipeData";
 import { useToast } from "@/hooks/use-toast";
+
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 interface QuotationItem {
   id: string;
@@ -18,13 +27,24 @@ interface FormState {
   sizeSearch: string;
 }
 
-interface EditState {
+interface RowEditState {
   id: string;
-  field: "size" | "quantity";
   sizeSearch: string;
+  selectedDnLabel: string;
+  selectedPn: PNRating | "";
   quantityVal: string;
   showSizeDrop: boolean;
+  showPNDrop: boolean;
 }
+
+interface QuotationHeader {
+  title: string;
+  subtitle: string;
+  note: string;
+  date: string;
+}
+
+// ─── Constants ────────────────────────────────────────────────────────────────
 
 const VAT_RATE = 0.13;
 
@@ -33,39 +53,64 @@ function generateId() {
 }
 
 function formatNum(n: number, decimals = 2) {
-  return n.toLocaleString("en-IN", { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+  return n.toLocaleString("en-IN", {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  });
 }
 
-// Inline size search dropdown for table editing
-function SizeSearchDropdown({
+function todayString() {
+  return new Date().toLocaleDateString("en-IN", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+}
+
+// ─── Reusable inline size search dropdown ─────────────────────────────────────
+
+function SizeDropdown({
   value,
   onChange,
   onSelect,
-  onBlur,
+  open,
+  onOpen,
+  onClose,
+  autoFocus = false,
+  placeholder = "Search size…",
 }: {
   value: string;
   onChange: (v: string) => void;
   onSelect: (s: string) => void;
-  onBlur: () => void;
+  open: boolean;
+  onOpen: () => void;
+  onClose: () => void;
+  autoFocus?: boolean;
+  placeholder?: string;
 }) {
-  const filtered = PIPE_SIZES.filter((s) => s.toLowerCase().includes(value.toLowerCase()));
+  const filtered = PIPE_SIZES.filter((s) =>
+    s.toLowerCase().includes(value.toLowerCase())
+  );
   return (
-    <div className="relative min-w-[100px]">
+    <div className="relative">
       <input
-        autoFocus
+        autoFocus={autoFocus}
         type="text"
         value={value}
-        className="w-full border border-blue-400 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-        onChange={(e) => onChange(e.target.value)}
-        onBlur={() => setTimeout(onBlur, 150)}
+        placeholder={placeholder}
+        className="w-full border border-blue-400 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        onChange={(e) => { onChange(e.target.value); onOpen(); }}
+        onFocus={onOpen}
+        onBlur={() => setTimeout(onClose, 150)}
+        autoComplete="off"
       />
-      {filtered.length > 0 && (
-        <div className="absolute z-30 top-full left-0 right-0 mt-0.5 bg-white border border-slate-200 rounded shadow-lg max-h-40 overflow-y-auto">
+      {open && filtered.length > 0 && (
+        <div className="absolute z-30 top-full left-0 right-0 mt-0.5 bg-white border border-slate-200 rounded-lg shadow-lg max-h-44 overflow-y-auto">
           {filtered.map((s) => (
             <button
               key={s}
-              className="w-full text-left px-3 py-1.5 text-sm hover:bg-blue-50 text-slate-800"
-              onMouseDown={() => onSelect(s)}
+              className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50 text-slate-800"
+              onMouseDown={() => { onSelect(s); onClose(); }}
             >
               {s}
             </button>
@@ -76,32 +121,278 @@ function SizeSearchDropdown({
   );
 }
 
+function PNDropdown({
+  dnLabel,
+  selected,
+  onSelect,
+  open,
+  onToggle,
+  onClose,
+  showAvgWt = false,
+}: {
+  dnLabel: string;
+  selected: PNRating | "";
+  onSelect: (pn: PNRating) => void;
+  open: boolean;
+  onToggle: () => void;
+  onClose: () => void;
+  showAvgWt?: boolean;
+}) {
+  const pns = dnLabel ? getAvailablePNs(dnLabel) : [];
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        disabled={!dnLabel}
+        onClick={onToggle}
+        onBlur={() => setTimeout(onClose, 150)}
+        className="w-full border border-blue-400 rounded-lg px-3 py-2 text-sm text-left bg-white flex items-center justify-between focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-40 disabled:cursor-not-allowed"
+      >
+        <span className={selected ? "text-slate-800" : "text-slate-400"}>
+          {selected || "Select PN"}
+        </span>
+        <ChevronDown className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+      </button>
+      {open && pns.length > 0 && (
+        <div className="absolute z-30 top-full left-0 right-0 mt-0.5 bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden">
+          {pns.map((pn) => (
+            <button
+              key={pn}
+              className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50 text-slate-800 flex justify-between items-center"
+              onMouseDown={() => { onSelect(pn); onClose(); }}
+            >
+              <span>{pn}</span>
+              {showAvgWt && (
+                <span className="text-xs text-slate-400">
+                  {getAvgWeight(dnLabel, pn)} kg/m
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Print / Excel helpers ────────────────────────────────────────────────────
+
+function buildPrintHTML(
+  header: QuotationHeader,
+  items: QuotationItem[],
+  rateKg: number,
+  subTotal: number,
+  vat: number,
+  totalWithVat: number,
+) {
+  const rows = items
+    .map(
+      (item, i) => {
+        const rpm = item.avgWeight * rateKg;
+        const amount = item.quantity * rpm;
+        const bg = i % 2 === 0 ? "#ffffff" : "#f8fafc";
+        return `
+        <tr style="background:${bg}">
+          <td style="text-align:center;color:#94a3b8">${i + 1}</td>
+          <td style="font-weight:600">${item.dnLabel} ${item.pn} PE Pipe</td>
+          <td style="text-align:right">${item.quantity.toLocaleString("en-IN")}</td>
+          <td style="text-align:right">${formatNum(rpm)}</td>
+          <td style="text-align:right;font-weight:600">${formatNum(amount)}</td>
+        </tr>`;
+      },
+    )
+    .join("");
+
+  return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>${header.title}</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:Arial,Helvetica,sans-serif;padding:32px 40px;color:#1e293b;font-size:13px}
+    .header{text-align:center;margin-bottom:28px}
+    .header h1{font-size:26px;font-weight:700;color:#1e3a8a;letter-spacing:1px}
+    .header p{color:#64748b;margin-top:4px;font-size:12px}
+    table{width:100%;border-collapse:collapse;margin-bottom:24px}
+    thead tr{background:#1e3a8a}
+    th{color:#fff;padding:10px 12px;font-size:11px;font-weight:600;border:1px solid #1e40af}
+    th:first-child{text-align:center;width:48px}
+    th:nth-child(2){text-align:left}
+    th:not(:first-child):not(:nth-child(2)){text-align:right}
+    td{padding:9px 12px;border:1px solid #e2e8f0;font-size:13px}
+    td:first-child{text-align:center;color:#94a3b8}
+    td:not(:first-child):not(:nth-child(2)){text-align:right}
+    .totals{float:right;width:288px;border:1px solid #e2e8f0;border-radius:6px;overflow:hidden;margin-bottom:24px}
+    .total-row{display:flex;justify-content:space-between;padding:10px 16px;border-bottom:1px solid #e2e8f0;background:#f8fafc;font-size:13px}
+    .grand{display:flex;justify-content:space-between;padding:13px 16px;background:#1e3a8a;color:#fff;font-weight:700;font-size:14px}
+    .clearfix::after{content:"";display:table;clear:both}
+    .note{text-align:center;font-size:10px;color:#94a3b8;margin-top:32px}
+    @media print{body{padding:20px 28px}}
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>${header.title}</h1>
+    ${header.subtitle ? `<p>${header.subtitle}</p>` : ""}
+    ${header.note ? `<p>${header.note}</p>` : ""}
+    ${header.date ? `<p>Date: ${header.date}</p>` : ""}
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th>S.N</th>
+        <th>Item Description</th>
+        <th>Quantity (m)</th>
+        <th>Rate/m (Rs.)</th>
+        <th>Amount (Rs.)</th>
+      </tr>
+    </thead>
+    <tbody>${rows}</tbody>
+  </table>
+  <div class="clearfix">
+    <div class="totals">
+      <div class="total-row"><span>Sub Total</span><span>Rs. ${formatNum(subTotal)}</span></div>
+      <div class="total-row"><span>VAT @ 13%</span><span>Rs. ${formatNum(vat)}</span></div>
+      <div class="grand"><span>Grand Total (incl. VAT)</span><span>Rs. ${formatNum(totalWithVat)}</span></div>
+    </div>
+  </div>
+  <div class="note">* Prices are subject to change without prior notice. Valid for 30 days.</div>
+  <script>window.onload=()=>{ window.print(); }</script>
+</body>
+</html>`;
+}
+
+function exportExcel(
+  header: QuotationHeader,
+  items: QuotationItem[],
+  rateKg: number,
+) {
+  const wb = XLSX.utils.book_new();
+
+  // Data starts at row index 0 (A1)
+  // Layout:
+  //   Row 1: Title
+  //   Row 2: Subtitle
+  //   Row 3: Note
+  //   Row 4: Date label | date value
+  //   Row 5: (blank)
+  //   Row 6: "Rate per kg (Rs.)" | rateKg   ← B6 is the rate reference cell
+  //   Row 7: (blank)
+  //   Row 8: Column headers
+  //   Row 9+: Item data rows
+  //   ...
+  //   Sub Total / VAT / Grand Total rows
+
+  const RATE_ROW = 6; // 1-indexed Excel row for rate per kg  (row index 5)
+  const HEADER_ROW = 8; // 1-indexed Excel row for column headers (row index 7)
+  const DATA_START_ROW = 9; // 1-indexed first data row (row index 8)
+
+  const aoa: (string | number)[][] = [
+    [header.title],
+    [header.subtitle],
+    [header.note],
+    ["Date:", header.date],
+    [],
+    ["Rate per kg (Rs.)", rateKg],
+    [],
+    ["S.N", "Item Description", "Size", "PN Rating", "Avg Wt (kg/m)", "Qty (m)", "Rate/m (Rs.)", "Amount (Rs.)"],
+  ];
+
+  items.forEach((item, i) => {
+    aoa.push([
+      i + 1,
+      `${item.dnLabel} ${item.pn} PE Pipe`,
+      item.dnLabel,
+      item.pn,
+      item.avgWeight,
+      item.quantity,
+      0, // placeholder — formula set below
+      0, // placeholder — formula set below
+    ]);
+  });
+
+  const subTotalRow = DATA_START_ROW + items.length;
+  const vatRow = subTotalRow + 1;
+  const grandRow = vatRow + 1;
+
+  aoa.push([]); // spacing
+  aoa.push(["", "", "", "", "", "", "Sub Total", 0]);
+  aoa.push(["", "", "", "", "", "", "VAT (13%)", 0]);
+  aoa.push(["", "", "", "", "", "", "Grand Total (incl. VAT)", 0]);
+
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+
+  // Set formulas for each item row
+  items.forEach((_, i) => {
+    const excelRow = DATA_START_ROW + i;
+    const eIdx = XLSX.utils.encode_cell;
+    // Rate/m (col G, index 6) = Avg Wt (E) × Rate/kg ($B$6)
+    ws[eIdx({ r: excelRow - 1, c: 6 })] = { t: "n", f: `E${excelRow}*$B$${RATE_ROW}` };
+    // Amount (col H, index 7) = Qty (F) × Rate/m (G)
+    ws[eIdx({ r: excelRow - 1, c: 7 })] = { t: "n", f: `F${excelRow}*G${excelRow}` };
+  });
+
+  // Sub Total: SUM of Amount column from data rows
+  if (items.length > 0) {
+    const amtRange = `H${DATA_START_ROW}:H${DATA_START_ROW + items.length - 1}`;
+    ws[XLSX.utils.encode_cell({ r: subTotalRow - 1, c: 7 })] = { t: "n", f: `SUM(${amtRange})` };
+    ws[XLSX.utils.encode_cell({ r: vatRow - 1, c: 7 })] = { t: "n", f: `H${subTotalRow}*0.13` };
+    ws[XLSX.utils.encode_cell({ r: grandRow - 1, c: 7 })] = { t: "n", f: `H${subTotalRow}+H${vatRow}` };
+  }
+
+  // Column widths
+  ws["!cols"] = [
+    { wch: 5 },  // S.N
+    { wch: 32 }, // Description
+    { wch: 10 }, // Size
+    { wch: 10 }, // PN
+    { wch: 14 }, // Avg Wt
+    { wch: 10 }, // Qty
+    { wch: 15 }, // Rate/m
+    { wch: 16 }, // Amount
+  ];
+
+  // Set sheet range
+  ws["!ref"] = XLSX.utils.encode_range({
+    s: { r: 0, c: 0 },
+    e: { r: grandRow, c: 7 },
+  });
+
+  XLSX.utils.book_append_sheet(wb, ws, "Quotation");
+  XLSX.writeFile(wb, "PE_Pipe_Quotation.xlsx");
+}
+
+// ─── Main Component ───────────────────────────────────────────────────────────
+
 export default function QuotationPage() {
   const { toast } = useToast();
-  const printRef = useRef<HTMLDivElement>(null);
+  const downloadBtnRef = useRef<HTMLDivElement>(null);
 
-  // Global rate per kg for entire quotation
+  const [header, setHeader] = useState<QuotationHeader>({
+    title: "QUOTATION",
+    subtitle: "PE Pipe — Manufactured as per ISO 2081",
+    note: "Effective from Sharaban 01, 2081",
+    date: todayString(),
+  });
+  const [editingHeaderField, setEditingHeaderField] = useState<keyof QuotationHeader | null>(null);
+
   const [globalRatePerKg, setGlobalRatePerKg] = useState<string>("");
 
   const [items, setItems] = useState<QuotationItem[]>([]);
-  const [form, setForm] = useState<FormState>({
-    dnLabel: "",
-    pn: "",
-    quantity: "",
-    sizeSearch: "",
-  });
-  const [showSizeDropdown, setShowSizeDropdown] = useState(false);
-  const [showPNDropdown, setShowPNDropdown] = useState(false);
+  const [form, setForm] = useState<FormState>({ dnLabel: "", pn: "", quantity: "", sizeSearch: "" });
+  const [showFormSizeDrop, setShowFormSizeDrop] = useState(false);
+  const [showFormPNDrop, setShowFormPNDrop] = useState(false);
   const [showQuotation, setShowQuotation] = useState(false);
+  const [showDownloadMenu, setShowDownloadMenu] = useState(false);
 
-  // Inline edit state
-  const [editState, setEditState] = useState<EditState | null>(null);
+  // Row inline edit state (covers size + PN + qty together)
+  const [rowEdit, setRowEdit] = useState<RowEditState | null>(null);
 
-  const filteredSizes = PIPE_SIZES.filter((s) =>
+  const filteredFormSizes = PIPE_SIZES.filter((s) =>
     s.toLowerCase().includes(form.sizeSearch.toLowerCase())
   );
-
-  const availablePNs = form.dnLabel ? getAvailablePNs(form.dnLabel) : [];
+  const formPNs = form.dnLabel ? getAvailablePNs(form.dnLabel) : [];
 
   const rateKg = parseFloat(globalRatePerKg);
   const rateKgValid = !isNaN(rateKg) && rateKg > 0;
@@ -109,98 +400,104 @@ export default function QuotationPage() {
   const currentAvgWeight =
     form.dnLabel && form.pn ? getAvgWeight(form.dnLabel, form.pn as PNRating) : undefined;
 
-  const ratePerMeter =
-    currentAvgWeight && rateKgValid ? currentAvgWeight * rateKg : undefined;
+  // Close download menu on outside click
+  useEffect(() => {
+    if (!showDownloadMenu) return;
+    const handler = (e: MouseEvent) => {
+      if (downloadBtnRef.current && !downloadBtnRef.current.contains(e.target as Node)) {
+        setShowDownloadMenu(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [showDownloadMenu]);
 
-  const handleSelectSize = (dnLabel: string) => {
-    setForm((f) => ({ ...f, dnLabel, sizeSearch: dnLabel, pn: "" }));
-    setShowSizeDropdown(false);
-  };
+  const subTotal = items.reduce((sum, item) => {
+    if (!rateKgValid) return sum;
+    return sum + item.quantity * item.avgWeight * rateKg;
+  }, 0);
+  const vat = subTotal * VAT_RATE;
+  const totalWithVat = subTotal + vat;
 
+  // ── Add item ──
   const handleAddItem = () => {
-    if (!globalRatePerKg || !rateKgValid) {
-      toast({ title: "Enter a valid Rate per kg first", variant: "destructive" });
-      return;
-    }
+    if (!rateKgValid) { toast({ title: "Enter a valid Rate per kg first", variant: "destructive" }); return; }
     if (!form.dnLabel) { toast({ title: "Select a pipe size", variant: "destructive" }); return; }
     if (!form.pn) { toast({ title: "Select a PN rating", variant: "destructive" }); return; }
-    if (!form.quantity || parseFloat(form.quantity) <= 0) {
-      toast({ title: "Enter a valid quantity", variant: "destructive" });
-      return;
-    }
-
+    if (!form.quantity || parseFloat(form.quantity) <= 0) { toast({ title: "Enter a valid quantity", variant: "destructive" }); return; }
     const avgWeight = getAvgWeight(form.dnLabel, form.pn as PNRating)!;
-    setItems((prev) => [
-      ...prev,
-      {
-        id: generateId(),
-        dnLabel: form.dnLabel,
-        pn: form.pn as PNRating,
-        avgWeight,
-        quantity: parseFloat(form.quantity),
-      },
-    ]);
+    setItems((prev) => [...prev, { id: generateId(), dnLabel: form.dnLabel, pn: form.pn as PNRating, avgWeight, quantity: parseFloat(form.quantity) }]);
     setForm({ dnLabel: "", pn: "", quantity: "", sizeSearch: "" });
     toast({ title: "Item added" });
   };
 
   const handleRemoveItem = (id: string) => {
     setItems((prev) => prev.filter((i) => i.id !== id));
-    if (editState?.id === id) setEditState(null);
+    if (rowEdit?.id === id) setRowEdit(null);
   };
 
-  // Inline edit handlers
-  const startEditQty = (item: QuotationItem) => {
-    setEditState({ id: item.id, field: "quantity", sizeSearch: item.dnLabel, quantityVal: String(item.quantity), showSizeDrop: false });
+  // ── Row edit ──
+  const startRowEdit = (item: QuotationItem) => {
+    setRowEdit({
+      id: item.id,
+      sizeSearch: item.dnLabel,
+      selectedDnLabel: item.dnLabel,
+      selectedPn: item.pn,
+      quantityVal: String(item.quantity),
+      showSizeDrop: false,
+      showPNDrop: false,
+    });
   };
 
-  const startEditSize = (item: QuotationItem) => {
-    setEditState({ id: item.id, field: "size", sizeSearch: item.dnLabel, quantityVal: String(item.quantity), showSizeDrop: true });
-  };
-
-  const commitEdit = useCallback(() => {
-    if (!editState) return;
+  const commitRowEdit = useCallback(() => {
+    if (!rowEdit) return;
+    const { selectedDnLabel, selectedPn, quantityVal } = rowEdit;
+    if (!selectedDnLabel || !selectedPn) { setRowEdit(null); return; }
+    const qty = parseFloat(quantityVal);
+    const avgWeight = getAvgWeight(selectedDnLabel, selectedPn as PNRating);
+    if (!avgWeight || isNaN(qty) || qty <= 0) { setRowEdit(null); return; }
     setItems((prev) =>
-      prev.map((item) => {
-        if (item.id !== editState.id) return item;
-        if (editState.field === "quantity") {
-          const q = parseFloat(editState.quantityVal);
-          return isNaN(q) || q <= 0 ? item : { ...item, quantity: q };
-        }
-        if (editState.field === "size") {
-          const newDnLabel = editState.sizeSearch;
-          const spec = PIPE_DATA.find((p) => p.dnLabel === newDnLabel);
-          if (!spec) return item;
-          const newAvg = spec.avgWeights[item.pn];
-          if (newAvg === undefined) {
-            // PN not available for new size — pick first available
-            const firstPn = PN_RATINGS.find((pn) => spec.avgWeights[pn] !== undefined);
-            if (!firstPn) return item;
-            return { ...item, dnLabel: newDnLabel, pn: firstPn, avgWeight: spec.avgWeights[firstPn]! };
-          }
-          return { ...item, dnLabel: newDnLabel, avgWeight: newAvg };
-        }
-        return item;
-      })
+      prev.map((item) =>
+        item.id === rowEdit.id
+          ? { ...item, dnLabel: selectedDnLabel, pn: selectedPn as PNRating, avgWeight, quantity: qty }
+          : item
+      )
     );
-    setEditState(null);
-  }, [editState]);
+    setRowEdit(null);
+  }, [rowEdit]);
 
-  const subTotal = items.reduce((sum, item) => {
-    if (!rateKgValid) return sum;
-    const rpm = item.avgWeight * rateKg;
-    return sum + item.quantity * rpm;
-  }, 0);
+  // ── PDF print via new window ──
+  const handlePrintPDF = () => {
+    if (!rateKgValid || items.length === 0) {
+      toast({ title: "Add items and set rate per kg first", variant: "destructive" });
+      return;
+    }
+    const html = buildPrintHTML(header, items, rateKg, subTotal, vat, totalWithVat);
+    const win = window.open("", "_blank");
+    if (!win) { toast({ title: "Pop-up blocked — allow pop-ups and try again", variant: "destructive" }); return; }
+    win.document.write(html);
+    win.document.close();
+  };
 
-  const vat = subTotal * VAT_RATE;
-  const totalWithVat = subTotal + vat;
+  // ── Excel export ──
+  const handleExportExcel = () => {
+    if (items.length === 0) { toast({ title: "Add items first", variant: "destructive" }); return; }
+    exportExcel(header, items, rateKg || 0);
+  };
 
-  const handlePrint = () => window.print();
+  const headerFieldLabel: Record<keyof QuotationHeader, string> = {
+    title: "Document Title",
+    subtitle: "Subtitle / Description",
+    note: "Effective Date Note",
+    date: "Quotation Date",
+  };
+
+  // ─────────────────────────────────────────────────────────────────────────────
 
   return (
     <div className="min-h-screen bg-slate-50">
       {/* Header */}
-      <header className="bg-blue-900 text-white shadow-lg print:hidden">
+      <header className="bg-blue-900 text-white shadow-lg">
         <div className="max-w-5xl mx-auto px-4 py-5 flex items-center gap-3">
           <FileText className="w-7 h-7 text-blue-200" />
           <div>
@@ -210,17 +507,57 @@ export default function QuotationPage() {
         </div>
       </header>
 
-      <main className="max-w-5xl mx-auto px-4 py-8 print:hidden">
+      <main className="max-w-5xl mx-auto px-4 py-8 space-y-5">
 
-        {/* Global Rate per kg */}
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 mb-5">
+        {/* ── Quotation Header Editor ── */}
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5">
+          <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-4 flex items-center gap-2">
+            <Pencil className="w-3.5 h-3.5" />
+            Quotation Header Details
+          </h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {(Object.keys(header) as (keyof QuotationHeader)[]).map((field) => (
+              <div key={field}>
+                <label className="block text-xs font-medium text-slate-400 mb-1">
+                  {headerFieldLabel[field]}
+                </label>
+                {editingHeaderField === field ? (
+                  <div className="flex items-center gap-2">
+                    <input
+                      autoFocus
+                      type="text"
+                      value={header[field]}
+                      className="flex-1 border border-blue-400 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      onChange={(e) => setHeader((h) => ({ ...h, [field]: e.target.value }))}
+                      onBlur={() => setEditingHeaderField(null)}
+                      onKeyDown={(e) => { if (e.key === "Enter" || e.key === "Escape") setEditingHeaderField(null); }}
+                    />
+                    <button onClick={() => setEditingHeaderField(null)} className="text-green-600 hover:text-green-800 flex-shrink-0">
+                      <Check className="w-4 h-4" />
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setEditingHeaderField(field)}
+                    className="w-full text-left flex items-center justify-between gap-2 group border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 hover:border-blue-300 hover:bg-blue-50 transition-colors"
+                  >
+                    <span className="truncate">{header[field] || <span className="text-slate-400 italic">Click to edit…</span>}</span>
+                    <Pencil className="w-3.5 h-3.5 text-slate-300 group-hover:text-blue-400 flex-shrink-0 transition-colors" />
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* ── Global Rate per kg ── */}
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5">
           <div className="flex items-end gap-4 flex-wrap">
             <div className="flex-1 min-w-[200px]">
               <label className="block text-xs font-semibold text-slate-600 mb-1.5">
                 Rate per kg (Rs.) — applies to all items <span className="text-red-500">*</span>
               </label>
               <input
-                data-testid="input-global-rate-per-kg"
                 type="number"
                 min="0"
                 step="any"
@@ -238,95 +575,77 @@ export default function QuotationPage() {
           </div>
         </div>
 
-        {/* Add Item Card */}
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 mb-6">
+        {/* ── Add Item ── */}
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
           <h2 className="text-base font-semibold text-slate-800 mb-5 flex items-center gap-2">
             <Plus className="w-4 h-4 text-blue-600" />
             Add Pipe Item
           </h2>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            {/* Size Selector */}
-            <div className="relative">
+            {/* Size */}
+            <div>
               <label className="block text-xs font-medium text-slate-500 mb-1.5">
                 Pipe Size (DN/mm) <span className="text-red-500">*</span>
               </label>
               <div className="relative">
                 <input
-                  data-testid="input-size-search"
                   type="text"
                   value={form.sizeSearch}
-                  placeholder="e.g. 20mm, 63mm..."
+                  placeholder="e.g. 20mm, 63mm…"
                   className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 pr-8"
-                  onChange={(e) => {
-                    setForm((f) => ({ ...f, sizeSearch: e.target.value, dnLabel: "", pn: "" }));
-                    setShowSizeDropdown(true);
-                  }}
-                  onFocus={() => setShowSizeDropdown(true)}
-                  onBlur={() => setTimeout(() => setShowSizeDropdown(false), 150)}
+                  onChange={(e) => { setForm((f) => ({ ...f, sizeSearch: e.target.value, dnLabel: "", pn: "" })); setShowFormSizeDrop(true); }}
+                  onFocus={() => setShowFormSizeDrop(true)}
+                  onBlur={() => setTimeout(() => setShowFormSizeDrop(false), 150)}
                   autoComplete="off"
                 />
                 <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                {showFormSizeDrop && filteredFormSizes.length > 0 && (
+                  <div className="absolute z-20 top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                    {filteredFormSizes.map((s) => (
+                      <button
+                        key={s}
+                        className="w-full text-left px-4 py-2.5 text-sm hover:bg-blue-50 text-slate-800 transition-colors"
+                        onMouseDown={() => { setForm((f) => ({ ...f, dnLabel: s, sizeSearch: s, pn: "" })); setShowFormSizeDrop(false); }}
+                      >
+                        {s}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
-              {showSizeDropdown && filteredSizes.length > 0 && (
-                <div className="absolute z-20 top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
-                  {filteredSizes.map((s) => (
-                    <button
-                      key={s}
-                      data-testid={`option-size-${s}`}
-                      className="w-full text-left px-4 py-2.5 text-sm hover:bg-blue-50 text-slate-800 transition-colors"
-                      onMouseDown={() => handleSelectSize(s)}
-                    >
-                      {s}
-                    </button>
-                  ))}
-                </div>
-              )}
-              {showSizeDropdown && form.sizeSearch && filteredSizes.length === 0 && (
-                <div className="absolute z-20 top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg p-4 text-sm text-slate-500 text-center">
-                  No matching size found
-                </div>
-              )}
             </div>
 
-            {/* PN Selector */}
-            <div className="relative">
+            {/* PN Rating */}
+            <div>
               <label className="block text-xs font-medium text-slate-500 mb-1.5">
                 PN Rating <span className="text-red-500">*</span>
               </label>
               <div className="relative">
                 <button
-                  data-testid="select-pn"
-                  disabled={!form.dnLabel}
-                  className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm text-left focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed bg-white flex items-center justify-between"
-                  onClick={() => setShowPNDropdown((v) => !v)}
-                  onBlur={() => setTimeout(() => setShowPNDropdown(false), 150)}
                   type="button"
+                  disabled={!form.dnLabel}
+                  onClick={() => setShowFormPNDrop((v) => !v)}
+                  onBlur={() => setTimeout(() => setShowFormPNDrop(false), 150)}
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm text-left bg-white flex items-center justify-between focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <span className={form.pn ? "text-slate-800" : "text-slate-400"}>
                     {form.pn || "Select PN rating"}
                   </span>
                   <ChevronDown className="w-4 h-4 text-slate-400" />
                 </button>
-                {showPNDropdown && availablePNs.length > 0 && (
+                {showFormPNDrop && formPNs.length > 0 && (
                   <div className="absolute z-20 top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden">
-                    {availablePNs.map((pn) => {
-                      const aw = getAvgWeight(form.dnLabel, pn);
-                      return (
-                        <button
-                          key={pn}
-                          data-testid={`option-pn-${pn}`}
-                          className="w-full text-left px-4 py-2.5 text-sm hover:bg-blue-50 text-slate-800 transition-colors flex justify-between items-center"
-                          onMouseDown={() => {
-                            setForm((f) => ({ ...f, pn }));
-                            setShowPNDropdown(false);
-                          }}
-                        >
-                          <span>{pn}</span>
-                          <span className="text-xs text-slate-500">Avg: {aw} kg/m</span>
-                        </button>
-                      );
-                    })}
+                    {formPNs.map((pn) => (
+                      <button
+                        key={pn}
+                        className="w-full text-left px-4 py-2.5 text-sm hover:bg-blue-50 text-slate-800 flex justify-between"
+                        onMouseDown={() => { setForm((f) => ({ ...f, pn })); setShowFormPNDrop(false); }}
+                      >
+                        <span>{pn}</span>
+                        <span className="text-xs text-slate-400">{getAvgWeight(form.dnLabel, pn)} kg/m</span>
+                      </button>
+                    ))}
                   </div>
                 )}
               </div>
@@ -338,7 +657,6 @@ export default function QuotationPage() {
                 Quantity (meters) <span className="text-red-500">*</span>
               </label>
               <input
-                data-testid="input-quantity"
                 type="number"
                 min="0"
                 step="any"
@@ -350,7 +668,7 @@ export default function QuotationPage() {
             </div>
           </div>
 
-          {/* Live calculation preview */}
+          {/* Live calc preview */}
           {currentAvgWeight && rateKgValid && (
             <div className="mt-4 p-3 bg-blue-50 border border-blue-100 rounded-lg flex flex-wrap gap-5 text-sm">
               <div>
@@ -374,7 +692,6 @@ export default function QuotationPage() {
 
           <div className="mt-5 flex justify-end">
             <button
-              data-testid="button-add-item"
               onClick={handleAddItem}
               className="flex items-center gap-2 bg-blue-700 hover:bg-blue-800 text-white px-5 py-2.5 rounded-lg text-sm font-medium transition-colors"
             >
@@ -384,110 +701,139 @@ export default function QuotationPage() {
           </div>
         </div>
 
-        {/* Items Table */}
+        {/* ── Items Table ── */}
         {items.length > 0 && (
-          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 mb-6">
-            <h2 className="text-base font-semibold text-slate-800 mb-4">
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+            <h2 className="text-base font-semibold text-slate-800 mb-1">
               Quotation Items ({items.length})
             </h2>
+            <p className="text-xs text-slate-400 mb-4">Click the pencil icon on any row to edit size, PN, or quantity inline.</p>
+
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-slate-200">
-                    <th className="text-left text-xs font-semibold text-slate-500 pb-3 pr-2">#</th>
-                    <th className="text-left text-xs font-semibold text-slate-500 pb-3 pr-2">Size</th>
-                    <th className="text-left text-xs font-semibold text-slate-500 pb-3 pr-2">PN</th>
-                    <th className="text-right text-xs font-semibold text-slate-500 pb-3 pr-2">Avg Wt (kg/m)</th>
-                    <th className="text-right text-xs font-semibold text-slate-500 pb-3 pr-2">Qty (m)</th>
-                    <th className="text-right text-xs font-semibold text-slate-500 pb-3 pr-2">Rate/m (Rs.)</th>
-                    <th className="text-right text-xs font-semibold text-slate-500 pb-3">Amount (Rs.)</th>
-                    <th className="pb-3"></th>
+                    <th className="text-left text-xs font-semibold text-slate-400 pb-3 pr-2 w-6">#</th>
+                    <th className="text-left text-xs font-semibold text-slate-400 pb-3 pr-2">Size</th>
+                    <th className="text-left text-xs font-semibold text-slate-400 pb-3 pr-2">PN</th>
+                    <th className="text-right text-xs font-semibold text-slate-400 pb-3 pr-2">Avg Wt</th>
+                    <th className="text-right text-xs font-semibold text-slate-400 pb-3 pr-2">Qty (m)</th>
+                    <th className="text-right text-xs font-semibold text-slate-400 pb-3 pr-2">Rate/m (Rs.)</th>
+                    <th className="text-right text-xs font-semibold text-slate-400 pb-3">Amount (Rs.)</th>
+                    <th className="pb-3 w-16" />
                   </tr>
                 </thead>
                 <tbody>
                   {items.map((item, idx) => {
                     const rpm = rateKgValid ? item.avgWeight * rateKg : 0;
                     const amount = item.quantity * rpm;
-                    const isEditingThis = editState?.id === item.id;
+                    const isEditing = rowEdit?.id === item.id;
 
-                    return (
-                      <tr key={item.id} data-testid={`row-item-${item.id}`} className="border-b border-slate-100 last:border-0">
-                        <td className="py-3 pr-2 text-slate-400 text-xs">{idx + 1}</td>
+                    if (isEditing && rowEdit) {
+                      // ── Edit row ──────────────────────────────────────────
+                      const editPNs = rowEdit.selectedDnLabel
+                        ? getAvailablePNs(rowEdit.selectedDnLabel)
+                        : [];
 
-                        {/* Size cell — inline editable */}
-                        <td className="py-2 pr-2">
-                          {isEditingThis && editState.field === "size" ? (
-                            <div className="flex items-center gap-1">
-                              <SizeSearchDropdown
-                                value={editState.sizeSearch}
-                                onChange={(v) => setEditState((s) => s ? { ...s, sizeSearch: v } : s)}
-                                onSelect={(s) => setEditState((prev) => prev ? { ...prev, sizeSearch: s, showSizeDrop: false } : prev)}
-                                onBlur={commitEdit}
-                              />
-                              <button onClick={commitEdit} className="text-green-600 hover:text-green-800 flex-shrink-0">
+                      return (
+                        <tr key={item.id} className="border-b border-blue-100 bg-blue-50">
+                          <td className="py-2 pr-2 text-slate-400 text-xs">{idx + 1}</td>
+                          <td className="py-2 pr-2 min-w-[130px]">
+                            <SizeDropdown
+                              value={rowEdit.sizeSearch}
+                              onChange={(v) =>
+                                setRowEdit((s) => s ? { ...s, sizeSearch: v, selectedDnLabel: "", selectedPn: "", showSizeDrop: true } : s)
+                              }
+                              onSelect={(s) =>
+                                setRowEdit((prev) => prev ? { ...prev, sizeSearch: s, selectedDnLabel: s, selectedPn: "", showSizeDrop: false } : prev)
+                              }
+                              open={rowEdit.showSizeDrop}
+                              onOpen={() => setRowEdit((s) => s ? { ...s, showSizeDrop: true } : s)}
+                              onClose={() => setRowEdit((s) => s ? { ...s, showSizeDrop: false } : s)}
+                              autoFocus
+                            />
+                          </td>
+                          <td className="py-2 pr-2 min-w-[110px]">
+                            <PNDropdown
+                              dnLabel={rowEdit.selectedDnLabel}
+                              selected={rowEdit.selectedPn}
+                              onSelect={(pn) => setRowEdit((s) => s ? { ...s, selectedPn: pn, showPNDrop: false } : s)}
+                              open={rowEdit.showPNDrop}
+                              onToggle={() => setRowEdit((s) => s ? { ...s, showPNDrop: !s.showPNDrop } : s)}
+                              onClose={() => setRowEdit((s) => s ? { ...s, showPNDrop: false } : s)}
+                            />
+                          </td>
+                          <td className="py-2 pr-2 text-right text-slate-400 text-xs">
+                            {rowEdit.selectedDnLabel && rowEdit.selectedPn
+                              ? getAvgWeight(rowEdit.selectedDnLabel, rowEdit.selectedPn as PNRating)
+                              : "—"}
+                          </td>
+                          <td className="py-2 pr-2">
+                            <input
+                              type="number"
+                              min="0"
+                              step="any"
+                              value={rowEdit.quantityVal}
+                              className="w-20 ml-auto block border border-blue-400 rounded px-2 py-1 text-sm text-right focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              onChange={(e) => setRowEdit((s) => s ? { ...s, quantityVal: e.target.value } : s)}
+                              onKeyDown={(e) => { if (e.key === "Enter") commitRowEdit(); if (e.key === "Escape") setRowEdit(null); }}
+                            />
+                          </td>
+                          <td className="py-2 pr-2 text-right text-slate-400 text-xs">—</td>
+                          <td className="py-2 text-right text-slate-400 text-xs">—</td>
+                          <td className="py-2 pl-2">
+                            <div className="flex items-center gap-1 justify-end">
+                              <button
+                                onClick={commitRowEdit}
+                                className="text-green-600 hover:text-green-800 p-1 rounded hover:bg-green-50"
+                                title="Save"
+                              >
                                 <Check className="w-4 h-4" />
                               </button>
+                              <button
+                                onClick={() => setRowEdit(null)}
+                                className="text-slate-400 hover:text-slate-600 p-1 rounded hover:bg-slate-100"
+                                title="Cancel"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
                             </div>
-                          ) : (
-                            <button
-                              data-testid={`edit-size-${item.id}`}
-                              onClick={() => startEditSize(item)}
-                              className="flex items-center gap-1.5 group font-medium text-slate-800 hover:text-blue-700 transition-colors"
-                            >
-                              {item.dnLabel}
-                              <Pencil className="w-3 h-3 opacity-0 group-hover:opacity-100 text-blue-400 transition-opacity" />
-                            </button>
-                          )}
-                        </td>
+                          </td>
+                        </tr>
+                      );
+                    }
 
+                    // ── Normal row ────────────────────────────────────────────
+                    return (
+                      <tr key={item.id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50 transition-colors">
+                        <td className="py-3 pr-2 text-slate-400 text-xs">{idx + 1}</td>
+                        <td className="py-3 pr-2 font-medium text-slate-800">{item.dnLabel}</td>
                         <td className="py-3 pr-2 text-slate-600 text-xs">{item.pn}</td>
                         <td className="py-3 pr-2 text-right text-slate-500 text-xs">{item.avgWeight}</td>
-
-                        {/* Qty cell — inline editable */}
-                        <td className="py-2 pr-2 text-right">
-                          {isEditingThis && editState.field === "quantity" ? (
-                            <div className="flex items-center justify-end gap-1">
-                              <input
-                                autoFocus
-                                type="number"
-                                min="0"
-                                step="any"
-                                value={editState.quantityVal}
-                                className="w-20 border border-blue-400 rounded px-2 py-1 text-sm text-right focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                onChange={(e) => setEditState((s) => s ? { ...s, quantityVal: e.target.value } : s)}
-                                onBlur={commitEdit}
-                                onKeyDown={(e) => { if (e.key === "Enter") commitEdit(); if (e.key === "Escape") setEditState(null); }}
-                              />
-                              <button onClick={commitEdit} className="text-green-600 hover:text-green-800">
-                                <Check className="w-4 h-4" />
-                              </button>
-                            </div>
-                          ) : (
-                            <button
-                              data-testid={`edit-qty-${item.id}`}
-                              onClick={() => startEditQty(item)}
-                              className="flex items-center gap-1 group ml-auto hover:text-blue-700 transition-colors"
-                            >
-                              {formatNum(item.quantity, 0)}
-                              <Pencil className="w-3 h-3 opacity-0 group-hover:opacity-100 text-blue-400 transition-opacity" />
-                            </button>
-                          )}
-                        </td>
-
+                        <td className="py-3 pr-2 text-right">{formatNum(item.quantity, 0)}</td>
                         <td className="py-3 pr-2 text-right text-slate-600">
                           {rateKgValid ? formatNum(rpm) : <span className="text-slate-300">—</span>}
                         </td>
                         <td className="py-3 text-right font-semibold text-slate-800">
                           {rateKgValid ? formatNum(amount) : <span className="text-slate-300">—</span>}
                         </td>
-                        <td className="py-3 pl-3">
-                          <button
-                            data-testid={`button-remove-${item.id}`}
-                            onClick={() => handleRemoveItem(item.id)}
-                            className="text-red-300 hover:text-red-600 transition-colors"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                        <td className="py-3 pl-2">
+                          <div className="flex items-center gap-1 justify-end">
+                            <button
+                              onClick={() => startRowEdit(item)}
+                              className="text-slate-300 hover:text-blue-500 p-1 rounded hover:bg-blue-50 transition-colors"
+                              title="Edit row"
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => handleRemoveItem(item.id)}
+                              className="text-slate-300 hover:text-red-500 p-1 rounded hover:bg-red-50 transition-colors"
+                              title="Remove"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );
@@ -502,49 +848,78 @@ export default function QuotationPage() {
                 <div className="w-full max-w-xs space-y-2">
                   <div className="flex justify-between text-sm text-slate-600">
                     <span>Sub Total</span>
-                    <span data-testid="text-subtotal" className="font-medium">Rs. {formatNum(subTotal)}</span>
+                    <span className="font-medium">Rs. {formatNum(subTotal)}</span>
                   </div>
                   <div className="flex justify-between text-sm text-slate-600">
                     <span>VAT (13%)</span>
-                    <span data-testid="text-vat" className="font-medium">Rs. {formatNum(vat)}</span>
+                    <span className="font-medium">Rs. {formatNum(vat)}</span>
                   </div>
                   <div className="flex justify-between text-base font-bold text-slate-900 border-t border-slate-200 pt-2">
-                    <span>Total (incl. VAT)</span>
-                    <span data-testid="text-total-with-vat">Rs. {formatNum(totalWithVat)}</span>
+                    <span>Grand Total (incl. VAT)</span>
+                    <span>Rs. {formatNum(totalWithVat)}</span>
                   </div>
                 </div>
               </div>
             )}
 
             {/* Actions */}
-            <div className="mt-6 flex justify-between items-center">
+            <div className="mt-6 flex justify-between items-center flex-wrap gap-3">
               <button
-                data-testid="button-clear-all"
-                onClick={() => { setItems([]); setEditState(null); }}
+                onClick={() => { setItems([]); setRowEdit(null); }}
                 className="text-sm text-red-400 hover:text-red-600 flex items-center gap-1 transition-colors"
               >
                 <X className="w-4 h-4" />
                 Clear All
               </button>
-              <div className="flex gap-3">
+
+              <div className="flex gap-3 items-center">
+                {/* Preview button */}
                 <button
-                  data-testid="button-view-quotation"
                   disabled={!rateKgValid}
                   onClick={() => setShowQuotation(true)}
                   className="flex items-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   <FileText className="w-4 h-4" />
-                  Preview Quotation
+                  Preview
                 </button>
-                <button
-                  data-testid="button-print"
-                  disabled={!rateKgValid}
-                  onClick={() => { setShowQuotation(true); setTimeout(handlePrint, 350); }}
-                  className="flex items-center gap-2 bg-blue-700 hover:bg-blue-800 text-white px-4 py-2.5 rounded-lg text-sm font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                >
-                  <Printer className="w-4 h-4" />
-                  Print / Download
-                </button>
+
+                {/* Download dropdown */}
+                <div ref={downloadBtnRef} className="relative">
+                  <button
+                    disabled={!rateKgValid || items.length === 0}
+                    onClick={() => setShowDownloadMenu((v) => !v)}
+                    className="flex items-center gap-2 bg-blue-700 hover:bg-blue-800 text-white px-4 py-2.5 rounded-lg text-sm font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    <Download className="w-4 h-4" />
+                    Download
+                    <ChevronDown className="w-3.5 h-3.5" />
+                  </button>
+                  {showDownloadMenu && (
+                    <div className="absolute right-0 bottom-full mb-2 w-52 bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden z-20">
+                      <button
+                        onClick={() => { setShowDownloadMenu(false); handlePrintPDF(); }}
+                        className="w-full flex items-center gap-3 px-4 py-3.5 text-sm text-slate-700 hover:bg-blue-50 transition-colors"
+                      >
+                        <FileDown className="w-4 h-4 text-blue-600 flex-shrink-0" />
+                        <div className="text-left">
+                          <div className="font-medium">Download PDF</div>
+                          <div className="text-xs text-slate-400">Print-ready quotation</div>
+                        </div>
+                      </button>
+                      <div className="border-t border-slate-100" />
+                      <button
+                        onClick={() => { setShowDownloadMenu(false); handleExportExcel(); }}
+                        className="w-full flex items-center gap-3 px-4 py-3.5 text-sm text-slate-700 hover:bg-green-50 transition-colors"
+                      >
+                        <FileSpreadsheet className="w-4 h-4 text-green-600 flex-shrink-0" />
+                        <div className="text-left">
+                          <div className="font-medium">Download Excel</div>
+                          <div className="text-xs text-slate-400">Editable with formulas</div>
+                        </div>
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -553,64 +928,48 @@ export default function QuotationPage() {
         {items.length === 0 && (
           <div className="text-center py-16 text-slate-400">
             <FileText className="w-12 h-12 mx-auto mb-3 opacity-20" />
-            <p className="text-sm">No items added yet. Enter a rate per kg above, then add pipe items to build your quotation.</p>
+            <p className="text-sm">No items yet. Set a rate per kg and add pipe items above.</p>
           </div>
         )}
       </main>
 
-      {/* ── QUOTATION PREVIEW MODAL ── */}
+      {/* ── Quotation Preview Modal ── */}
       {showQuotation && (
-        <div className="fixed inset-0 z-50 bg-black/50 flex items-start justify-center py-8 px-4 overflow-y-auto print:static print:bg-transparent print:p-0 print:block">
-          <div
-            ref={printRef}
-            className="bg-white w-full max-w-4xl rounded-2xl shadow-2xl print:shadow-none print:rounded-none print:max-w-full"
-          >
-            {/* Modal toolbar — hidden on print */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 print:hidden">
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-start justify-center py-8 px-4 overflow-y-auto">
+          <div className="bg-white w-full max-w-4xl rounded-2xl shadow-2xl">
+            {/* Modal toolbar */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
               <h2 className="font-semibold text-slate-800">Quotation Preview</h2>
               <div className="flex gap-2">
                 <button
-                  data-testid="button-print-modal"
-                  onClick={handlePrint}
+                  onClick={handlePrintPDF}
                   className="flex items-center gap-2 bg-blue-700 hover:bg-blue-800 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
                 >
                   <Printer className="w-4 h-4" />
                   Print / Save PDF
                 </button>
                 <button
-                  data-testid="button-close-modal"
-                  onClick={() => setShowQuotation(false)}
-                  className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+                  onClick={handleExportExcel}
+                  className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
                 >
+                  <FileSpreadsheet className="w-4 h-4" />
+                  Excel
+                </button>
+                <button onClick={() => setShowQuotation(false)} className="p-2 hover:bg-slate-100 rounded-lg transition-colors">
                   <X className="w-5 h-5 text-slate-500" />
                 </button>
               </div>
             </div>
 
-            {/* Quotation document */}
-            <div className="p-10 print:p-8">
-              {/* Document header */}
-              <div className="text-center mb-10">
-                <h1 className="text-3xl font-bold text-blue-900 tracking-tight">QUOTATION</h1>
-                <p className="text-sm text-slate-500 mt-2">PE Pipe — Manufactured as per ISO 2081</p>
-                <p className="text-xs text-slate-400 mt-1">
-                  Date: {new Date().toLocaleDateString("en-IN", { year: "numeric", month: "long", day: "numeric" })}
-                </p>
+            {/* Document */}
+            <div className="p-10">
+              <div className="text-center mb-8">
+                <h1 className="text-3xl font-bold text-blue-900 tracking-tight">{header.title}</h1>
+                {header.subtitle && <p className="text-sm text-slate-500 mt-2">{header.subtitle}</p>}
+                {header.note && <p className="text-xs text-slate-400 mt-1">{header.note}</p>}
+                {header.date && <p className="text-xs text-slate-400 mt-0.5">Date: {header.date}</p>}
               </div>
 
-              {/* Meta row */}
-              <div className="flex justify-between mb-6 text-sm text-slate-600 border-t border-b border-slate-200 py-3">
-                <div>
-                  <span className="text-xs text-slate-400 block">Rate per kg</span>
-                  <span className="font-semibold text-slate-800">Rs. {formatNum(rateKg)}</span>
-                </div>
-                <div className="text-right">
-                  <span className="text-xs text-slate-400 block">Total items</span>
-                  <span className="font-semibold text-slate-800">{items.length}</span>
-                </div>
-              </div>
-
-              {/* Items table */}
               <div className="overflow-x-auto mb-8">
                 <table className="w-full text-sm border-collapse">
                   <thead>
@@ -626,11 +985,12 @@ export default function QuotationPage() {
                     {items.map((item, idx) => {
                       const rpm = item.avgWeight * rateKg;
                       const amount = item.quantity * rpm;
-                      const description = `${item.dnLabel} ${item.pn} PE Pipe`;
                       return (
                         <tr key={item.id} className={idx % 2 === 0 ? "bg-white" : "bg-slate-50"}>
                           <td className="text-center py-3 px-3 border border-slate-200 text-slate-500 text-xs">{idx + 1}</td>
-                          <td className="py-3 px-4 border border-slate-200 font-medium text-slate-800">{description}</td>
+                          <td className="py-3 px-4 border border-slate-200 font-medium text-slate-800">
+                            {item.dnLabel} {item.pn} PE Pipe
+                          </td>
                           <td className="text-right py-3 px-3 border border-slate-200 text-slate-700">{formatNum(item.quantity, 0)}</td>
                           <td className="text-right py-3 px-3 border border-slate-200 text-slate-700">{formatNum(rpm)}</td>
                           <td className="text-right py-3 px-3 border border-slate-200 font-semibold text-slate-800">{formatNum(amount)}</td>
@@ -641,7 +1001,6 @@ export default function QuotationPage() {
                 </table>
               </div>
 
-              {/* Totals box */}
               <div className="flex justify-end mb-8">
                 <div className="w-72 border border-slate-200 rounded-lg overflow-hidden text-sm">
                   <div className="flex justify-between px-4 py-3 bg-slate-50 border-b border-slate-200">
@@ -666,16 +1025,6 @@ export default function QuotationPage() {
           </div>
         </div>
       )}
-
-      {/* Print — show quotation, hide everything else */}
-      <style>{`
-        @media print {
-          body > * { display: none !important; }
-          .fixed { position: static !important; background: transparent !important; padding: 0 !important; display: block !important; }
-          .fixed > div { box-shadow: none !important; border-radius: 0 !important; max-width: 100% !important; }
-          .print\\:hidden { display: none !important; }
-        }
-      `}</style>
     </div>
   );
 }
