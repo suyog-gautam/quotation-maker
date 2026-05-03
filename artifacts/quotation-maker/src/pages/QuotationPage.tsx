@@ -1,14 +1,117 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import * as XLSX from "xlsx";
+import NepaliDate from "nepali-date-converter";
 import {
   Plus, Trash2, FileText, Printer, X, ChevronDown,
-  Pencil, Check, Download, FileSpreadsheet, FileDown,
+  Pencil, Check, Download, FileSpreadsheet, FileDown, Calendar,
 } from "lucide-react";
 import {
   PIPE_DATA, PIPE_SIZES, PN_RATINGS, getAvgWeight,
   getAvailablePNs, type PNRating,
 } from "@/data/pipeData";
 import { useToast } from "@/hooks/use-toast";
+
+// ─── Bikram Sambat helpers ─────────────────────────────────────────────────────
+
+const BS_MONTHS = [
+  "Baisakh", "Jestha", "Ashadh", "Shrawan", "Bhadra", "Ashwin",
+  "Kartik", "Mangsir", "Poush", "Magh", "Falgun", "Chaitra",
+];
+
+function todayBS() {
+  try {
+    const nd = new NepaliDate(new Date());
+    return { year: nd.getYear(), month: nd.getMonth(), day: nd.getDate() };
+  } catch {
+    return { year: 2082, month: 1, day: 20 };
+  }
+}
+
+function formatBSDate(year: number, month: number, day: number) {
+  return `${day} ${BS_MONTHS[month]} ${year}`;
+}
+
+function BsDatePicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const init = todayBS();
+  const [year, setYear] = useState(init.year);
+  const [month, setMonth] = useState(init.month);
+  const [day, setDay] = useState(init.day);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  const confirm = () => {
+    onChange(formatBSDate(year, month, day));
+    setOpen(false);
+  };
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="w-full text-left flex items-center justify-between gap-2 group border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 hover:border-blue-300 hover:bg-blue-50 transition-colors"
+      >
+        <span className={value ? "" : "text-slate-400 italic"}>{value || "Select BS date…"}</span>
+        <Calendar className="w-3.5 h-3.5 text-slate-300 group-hover:text-blue-400 flex-shrink-0 transition-colors" />
+      </button>
+      {open && (
+        <div className="absolute z-50 top-full left-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl p-4 w-72">
+          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Select BS Date</p>
+          <div className="flex gap-2 mb-4">
+            {/* Month */}
+            <select
+              value={month}
+              onChange={(e) => setMonth(Number(e.target.value))}
+              className="flex-1 border border-slate-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              {BS_MONTHS.map((m, i) => (
+                <option key={i} value={i}>{m}</option>
+              ))}
+            </select>
+            {/* Day */}
+            <select
+              value={day}
+              onChange={(e) => setDay(Number(e.target.value))}
+              className="w-16 border border-slate-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              {Array.from({ length: 32 }, (_, i) => i + 1).map((d) => (
+                <option key={d} value={d}>{d}</option>
+              ))}
+            </select>
+            {/* Year */}
+            <select
+              value={year}
+              onChange={(e) => setYear(Number(e.target.value))}
+              className="w-24 border border-slate-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              {Array.from({ length: 20 }, (_, i) => 2075 + i).map((y) => (
+                <option key={y} value={y}>{y}</option>
+              ))}
+            </select>
+          </div>
+          <div className="flex justify-between items-center">
+            <span className="text-xs text-slate-400">{formatBSDate(year, month, day)}</span>
+            <button
+              onClick={confirm}
+              className="bg-blue-700 hover:bg-blue-800 text-white px-4 py-1.5 rounded-lg text-sm font-medium transition-colors"
+            >
+              Set Date
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -59,11 +162,8 @@ function formatNum(n: number, decimals = 2) {
 }
 
 function todayString() {
-  return new Date().toLocaleDateString("en-IN", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
+  const bs = todayBS();
+  return formatBSDate(bs.year, bs.month, bs.day);
 }
 
 // ─── Reusable inline size search dropdown ─────────────────────────────────────
@@ -386,7 +486,7 @@ export default function QuotationPage() {
 
   const [header, setHeader] = useState<QuotationHeader>({
     title: "QUOTATION",
-    address: "",
+    address: "Nepal",
     date: todayString(),
   });
   const [editingHeaderField, setEditingHeaderField] = useState<keyof QuotationHeader | null>(null);
@@ -527,20 +627,51 @@ export default function QuotationPage() {
             <Pencil className="w-3.5 h-3.5" />
             Quotation Header Details
           </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {(Object.keys(header) as (keyof QuotationHeader)[]).map((field) => (
-              <div key={field}>
-                <label className="block text-xs font-medium text-slate-400 mb-1">
-                  {headerFieldLabel[field]}
-                </label>
-                {editingHeaderField === field ? (
+          <div className="space-y-3">
+
+            {/* Title — full width */}
+            <div>
+              <label className="block text-xs font-medium text-slate-400 mb-1">Title</label>
+              {editingHeaderField === "title" ? (
+                <div className="flex items-center gap-2">
+                  <input
+                    autoFocus
+                    type="text"
+                    value={header.title}
+                    className="flex-1 border border-blue-400 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    onChange={(e) => setHeader((h) => ({ ...h, title: e.target.value }))}
+                    onBlur={() => setEditingHeaderField(null)}
+                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === "Escape") setEditingHeaderField(null); }}
+                  />
+                  <button onClick={() => setEditingHeaderField(null)} className="text-green-600 hover:text-green-800 flex-shrink-0">
+                    <Check className="w-4 h-4" />
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setEditingHeaderField("title")}
+                  className="w-full text-left flex items-center justify-between gap-2 group border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 hover:border-blue-300 hover:bg-blue-50 transition-colors"
+                >
+                  <span className="truncate">{header.title || <span className="text-slate-400 italic">Click to edit…</span>}</span>
+                  <Pencil className="w-3.5 h-3.5 text-slate-300 group-hover:text-blue-400 flex-shrink-0 transition-colors" />
+                </button>
+              )}
+            </div>
+
+            {/* Address + Date — two columns */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+
+              {/* Address */}
+              <div>
+                <label className="block text-xs font-medium text-slate-400 mb-1">Address</label>
+                {editingHeaderField === "address" ? (
                   <div className="flex items-center gap-2">
                     <input
                       autoFocus
                       type="text"
-                      value={header[field]}
+                      value={header.address}
                       className="flex-1 border border-blue-400 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      onChange={(e) => setHeader((h) => ({ ...h, [field]: e.target.value }))}
+                      onChange={(e) => setHeader((h) => ({ ...h, address: e.target.value }))}
                       onBlur={() => setEditingHeaderField(null)}
                       onKeyDown={(e) => { if (e.key === "Enter" || e.key === "Escape") setEditingHeaderField(null); }}
                     />
@@ -550,15 +681,25 @@ export default function QuotationPage() {
                   </div>
                 ) : (
                   <button
-                    onClick={() => setEditingHeaderField(field)}
+                    onClick={() => setEditingHeaderField("address")}
                     className="w-full text-left flex items-center justify-between gap-2 group border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 hover:border-blue-300 hover:bg-blue-50 transition-colors"
                   >
-                    <span className="truncate">{header[field] || <span className="text-slate-400 italic">Click to edit…</span>}</span>
+                    <span className="truncate">{header.address || <span className="text-slate-400 italic">Click to edit…</span>}</span>
                     <Pencil className="w-3.5 h-3.5 text-slate-300 group-hover:text-blue-400 flex-shrink-0 transition-colors" />
                   </button>
                 )}
               </div>
-            ))}
+
+              {/* Date — BS date picker */}
+              <div>
+                <label className="block text-xs font-medium text-slate-400 mb-1">Date (BS)</label>
+                <BsDatePicker
+                  value={header.date}
+                  onChange={(v) => setHeader((h) => ({ ...h, date: v }))}
+                />
+              </div>
+
+            </div>
           </div>
         </div>
 
