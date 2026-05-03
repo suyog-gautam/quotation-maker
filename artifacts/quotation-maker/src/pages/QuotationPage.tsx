@@ -322,32 +322,32 @@ function buildPrintHTML(
   <title>${header.title}</title>
   <style>
     *{box-sizing:border-box;margin:0;padding:0}
-    body{font-family:Arial,Helvetica,sans-serif;padding:32px 40px;color:#1e293b;font-size:13px}
-    .header{text-align:center;margin-bottom:28px}
-    .header h1{font-size:26px;font-weight:700;color:#1e3a8a;letter-spacing:1px}
-    .header p{color:#64748b;margin-top:4px;font-size:12px}
+    body{font-family:Arial,Helvetica,sans-serif;padding:32px 40px;color:#000;font-size:13px}
+    .header{text-align:center;margin-bottom:24px;border-bottom:2px solid #000;padding-bottom:14px}
+    .header h1{font-size:24px;font-weight:700;color:#000;letter-spacing:1px}
+    .header p{color:#222;margin-top:4px;font-size:12px}
     table{width:100%;border-collapse:collapse;margin-bottom:24px}
-    thead tr{background:#1e3a8a}
-    th{color:#fff;padding:10px 12px;font-size:11px;font-weight:600;border:1px solid #1e40af}
-    th:first-child{text-align:center;width:48px}
+    thead tr{background:#111;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    th{color:#fff;padding:9px 12px;font-size:11px;font-weight:700;border:1px solid #000}
+    th:first-child{text-align:center;width:44px}
     th:nth-child(2){text-align:left}
     th:not(:first-child):not(:nth-child(2)){text-align:right}
-    td{padding:9px 12px;border:1px solid #e2e8f0;font-size:13px}
-    td:first-child{text-align:center;color:#94a3b8}
+    td{padding:8px 12px;border:1px solid #666;font-size:13px;color:#000}
+    td:first-child{text-align:center;color:#333;font-size:12px}
     td:not(:first-child):not(:nth-child(2)){text-align:right}
-    .totals{float:right;width:288px;border:1px solid #e2e8f0;border-radius:6px;overflow:hidden;margin-bottom:24px}
-    .total-row{display:flex;justify-content:space-between;padding:10px 16px;border-bottom:1px solid #e2e8f0;background:#f8fafc;font-size:13px}
-    .grand{display:flex;justify-content:space-between;padding:13px 16px;background:#1e3a8a;color:#fff;font-weight:700;font-size:14px}
+    tr:nth-child(even){background:#efefef;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    .totals{float:right;width:300px;border:1.5px solid #333;overflow:hidden;margin-bottom:24px}
+    .total-row{display:flex;justify-content:space-between;padding:9px 14px;border-bottom:1px solid #555;background:#e8e8e8;font-size:13px;color:#000;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    .grand{display:flex;justify-content:space-between;padding:11px 14px;background:#111;color:#fff;font-weight:700;font-size:14px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
     .clearfix::after{content:"";display:table;clear:both}
-    .note{text-align:center;font-size:10px;color:#94a3b8;margin-top:32px}
-    @media print{body{padding:20px 28px}}
+    @media print{body{padding:18px 24px}}
   </style>
 </head>
 <body>
   <div class="header">
     <h1>${header.title}</h1>
     ${header.address ? `<p>${header.address}</p>` : ""}
-    ${header.date ? `<p>Date: ${header.date}</p>` : ""}
+    ${header.date ? `<p><strong>Date:</strong> ${header.date}</p>` : ""}
   </div>
   <table>
     <thead>
