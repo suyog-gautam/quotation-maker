@@ -1,3 +1,13 @@
 <svg width="180" height="180" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg">
-<rect width="180" height="180" rx="36" fill="#FF3C00"/>
+  <rect width="180" height="180" rx="36" fill="#1e3a8a"/>
+  <!-- Pipe body -->
+  <rect x="20" y="70" width="140" height="40" rx="6" fill="#93c5fd"/>
+  <!-- Pipe hole -->
+  <rect x="20" y="80" width="140" height="20" rx="4" fill="#1e3a8a"/>
+  <!-- Left flange -->
+  <rect x="14" y="58" width="22" height="64" rx="5" fill="#bfdbfe"/>
+  <!-- Right flange -->
+  <rect x="144" y="58" width="22" height="64" rx="5" fill="#bfdbfe"/>
+  <!-- Shine -->
+  <rect x="20" y="74" width="140" height="6" rx="3" fill="#dbeafe" opacity="0.6"/>
 </svg>
