@@ -507,6 +507,50 @@ export default function QuotationPage() {
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 
+  // Touch drag ref — holds in-flight touch state without stale closures
+  const touchDragRef = useRef<{ fromIdx: number; toIdx: number } | null>(null);
+
+  const handleGripTouchStart = useCallback((startIdx: number) => (e: React.TouchEvent) => {
+    e.preventDefault(); // stop scroll + text selection
+    touchDragRef.current = { fromIdx: startIdx, toIdx: startIdx };
+    setDragIndex(startIdx);
+    setDragOverIndex(startIdx);
+
+    const onMove = (ev: TouchEvent) => {
+      ev.preventDefault();
+      const touch = ev.touches[0];
+      const el = document.elementFromPoint(touch.clientX, touch.clientY);
+      const tr = el?.closest("tr[data-row-index]");
+      if (tr) {
+        const toIdx = parseInt(tr.getAttribute("data-row-index") ?? "-1");
+        if (toIdx >= 0 && touchDragRef.current) {
+          touchDragRef.current.toIdx = toIdx;
+          setDragOverIndex(toIdx);
+        }
+      }
+    };
+
+    const onEnd = () => {
+      const state = touchDragRef.current;
+      if (state && state.fromIdx !== state.toIdx) {
+        setItems((prev) => {
+          const reordered = [...prev];
+          const [moved] = reordered.splice(state.fromIdx, 1);
+          reordered.splice(state.toIdx, 0, moved);
+          return reordered;
+        });
+      }
+      setDragIndex(null);
+      setDragOverIndex(null);
+      touchDragRef.current = null;
+      document.removeEventListener("touchmove", onMove);
+      document.removeEventListener("touchend", onEnd);
+    };
+
+    document.addEventListener("touchmove", onMove, { passive: false });
+    document.addEventListener("touchend", onEnd);
+  }, []);
+
   const filteredFormSizes = PIPE_SIZES.filter((s) =>
     s.toLowerCase().includes(form.sizeSearch.toLowerCase())
   );
@@ -979,6 +1023,7 @@ export default function QuotationPage() {
                     return (
                       <tr
                         key={item.id}
+                        data-row-index={idx}
                         draggable
                         onDragStart={() => { setDragIndex(idx); setDragOverIndex(idx); }}
                         onDragEnter={() => setDragOverIndex(idx)}
@@ -999,7 +1044,6 @@ export default function QuotationPage() {
                           isDragging ? "opacity-40 bg-slate-100" : "hover:bg-slate-50",
                           isDropTarget ? "border-t-2 border-t-blue-500 bg-blue-50" : "",
                         ].join(" ")}
-                        style={{ cursor: "grab" }}
                       >
                         <td className="py-3 pr-2 text-slate-400 text-xs">{idx + 1}</td>
                         <td className="py-3 pr-2 font-medium text-slate-800">{item.dnLabel}</td>
@@ -1014,7 +1058,12 @@ export default function QuotationPage() {
                         </td>
                         <td className="py-3 pl-2">
                           <div className="flex items-center gap-1 justify-end">
-                            <span className="text-slate-300 cursor-grab p-1" title="Drag to reorder">
+                            <span
+                              className="text-slate-300 cursor-grab p-1 select-none"
+                              title="Drag to reorder"
+                              onTouchStart={handleGripTouchStart(idx)}
+                              style={{ touchAction: "none" }}
+                            >
                               <GripVertical className="w-3.5 h-3.5" />
                             </span>
                             <button
