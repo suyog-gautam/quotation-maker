@@ -3,7 +3,7 @@ import * as XLSX from "xlsx";
 import NepaliDate from "nepali-date-converter";
 import {
   Plus, Trash2, FileText, Printer, X, ChevronDown,
-  Pencil, Check, Download, FileSpreadsheet, FileDown, Calendar,
+  Pencil, Check, Download, FileSpreadsheet, FileDown, Calendar, GripVertical,
 } from "lucide-react";
 import {
   PIPE_DATA, PIPE_SIZES, PN_RATINGS, getAvgWeight,
@@ -503,6 +503,10 @@ export default function QuotationPage() {
   // Row inline edit state (covers size + PN + qty together)
   const [rowEdit, setRowEdit] = useState<RowEditState | null>(null);
 
+  // Drag-and-drop reorder state
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+
   const filteredFormSizes = PIPE_SIZES.filter((s) =>
     s.toLowerCase().includes(form.sizeSearch.toLowerCase())
   );
@@ -870,7 +874,7 @@ export default function QuotationPage() {
             <h2 className="text-base font-semibold text-slate-800 mb-1">
               Quotation Items ({items.length})
             </h2>
-            <p className="text-xs text-slate-400 mb-4">Click the pencil icon on any row to edit size, PN, or quantity inline.</p>
+            <p className="text-xs text-slate-400 mb-4">Drag <GripVertical className="inline w-3 h-3" /> to reorder rows. Click the pencil icon to edit inline.</p>
 
             <div className={rowEdit ? "overflow-visible" : "overflow-x-auto"}>
               <table className="w-full text-sm">
@@ -970,8 +974,33 @@ export default function QuotationPage() {
                     }
 
                     // ── Normal row ────────────────────────────────────────────
+                    const isDragging = dragIndex === idx;
+                    const isDropTarget = dragOverIndex === idx && dragIndex !== idx;
                     return (
-                      <tr key={item.id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50 transition-colors">
+                      <tr
+                        key={item.id}
+                        draggable
+                        onDragStart={() => { setDragIndex(idx); setDragOverIndex(idx); }}
+                        onDragEnter={() => setDragOverIndex(idx)}
+                        onDragOver={(e) => { e.preventDefault(); setDragOverIndex(idx); }}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          if (dragIndex === null || dragIndex === idx) return;
+                          const reordered = [...items];
+                          const [moved] = reordered.splice(dragIndex, 1);
+                          reordered.splice(idx, 0, moved);
+                          setItems(reordered);
+                          setDragIndex(null);
+                          setDragOverIndex(null);
+                        }}
+                        onDragEnd={() => { setDragIndex(null); setDragOverIndex(null); }}
+                        className={[
+                          "border-b border-slate-100 last:border-0 transition-colors",
+                          isDragging ? "opacity-40 bg-slate-100" : "hover:bg-slate-50",
+                          isDropTarget ? "border-t-2 border-t-blue-500 bg-blue-50" : "",
+                        ].join(" ")}
+                        style={{ cursor: "grab" }}
+                      >
                         <td className="py-3 pr-2 text-slate-400 text-xs">{idx + 1}</td>
                         <td className="py-3 pr-2 font-medium text-slate-800">{item.dnLabel}</td>
                         <td className="py-3 pr-2 text-slate-600 text-xs">{item.pn}</td>
@@ -985,6 +1014,9 @@ export default function QuotationPage() {
                         </td>
                         <td className="py-3 pl-2">
                           <div className="flex items-center gap-1 justify-end">
+                            <span className="text-slate-300 cursor-grab p-1" title="Drag to reorder">
+                              <GripVertical className="w-3.5 h-3.5" />
+                            </span>
                             <button
                               onClick={() => startRowEdit(item)}
                               className="text-slate-300 hover:text-blue-500 p-1 rounded hover:bg-blue-50 transition-colors"
