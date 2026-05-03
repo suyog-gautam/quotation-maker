@@ -39,8 +39,7 @@ interface RowEditState {
 
 interface QuotationHeader {
   title: string;
-  subtitle: string;
-  note: string;
+  address: string;
   date: string;
 }
 
@@ -73,6 +72,7 @@ function SizeDropdown({
   value,
   onChange,
   onSelect,
+  onClear,
   open,
   onOpen,
   onClose,
@@ -82,6 +82,7 @@ function SizeDropdown({
   value: string;
   onChange: (v: string) => void;
   onSelect: (s: string) => void;
+  onClear: () => void;
   open: boolean;
   onOpen: () => void;
   onClose: () => void;
@@ -93,19 +94,30 @@ function SizeDropdown({
   );
   return (
     <div className="relative">
-      <input
-        autoFocus={autoFocus}
-        type="text"
-        value={value}
-        placeholder={placeholder}
-        className="w-full border border-blue-400 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-        onChange={(e) => { onChange(e.target.value); onOpen(); }}
-        onFocus={onOpen}
-        onBlur={() => setTimeout(onClose, 150)}
-        autoComplete="off"
-      />
+      <div className="relative">
+        <input
+          autoFocus={autoFocus}
+          type="text"
+          value={value}
+          placeholder={placeholder}
+          className="w-full border border-blue-400 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 pr-7"
+          onChange={(e) => { onChange(e.target.value); onOpen(); }}
+          onFocus={onOpen}
+          onBlur={() => setTimeout(onClose, 150)}
+          autoComplete="off"
+        />
+        {value && (
+          <button
+            type="button"
+            onMouseDown={(e) => { e.preventDefault(); onClear(); }}
+            className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        )}
+      </div>
       {open && filtered.length > 0 && (
-        <div className="absolute z-30 top-full left-0 right-0 mt-0.5 bg-white border border-slate-200 rounded-lg shadow-lg max-h-44 overflow-y-auto">
+        <div className="absolute z-50 top-full left-0 right-0 mt-0.5 bg-white border border-slate-200 rounded-lg shadow-xl max-h-44 overflow-y-auto">
           {filtered.map((s) => (
             <button
               key={s}
@@ -154,7 +166,7 @@ function PNDropdown({
         <ChevronDown className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
       </button>
       {open && pns.length > 0 && (
-        <div className="absolute z-30 top-full left-0 right-0 mt-0.5 bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden">
+        <div className="absolute z-50 top-full left-0 right-0 mt-0.5 bg-white border border-slate-200 rounded-lg shadow-xl overflow-hidden">
           {pns.map((pn) => (
             <button
               key={pn}
@@ -234,8 +246,7 @@ function buildPrintHTML(
 <body>
   <div class="header">
     <h1>${header.title}</h1>
-    ${header.subtitle ? `<p>${header.subtitle}</p>` : ""}
-    ${header.note ? `<p>${header.note}</p>` : ""}
+    ${header.address ? `<p>${header.address}</p>` : ""}
     ${header.date ? `<p>Date: ${header.date}</p>` : ""}
   </div>
   <table>
@@ -292,13 +303,12 @@ function exportExcel(
   //   F: (blank gap)
   //   G: Avg Wt (kg/m)   — editable, drives Rate/m
 
-  const RATE_ROW = 6; // 1-indexed Excel row for rate per kg
-  const DATA_START_ROW = 9; // 1-indexed first data row
+  const RATE_ROW = 5; // 1-indexed Excel row for rate per kg (row 1=title, 2=address, 3=date, 4=blank, 5=rate)
+  const DATA_START_ROW = 8; // 1-indexed first data row (row 6=blank, 7=headers, 8=first item)
 
   const aoa: (string | number | null)[][] = [
     [header.title],
-    [header.subtitle],
-    [header.note],
+    [header.address],
     ["Date:", header.date],
     [],
     ["Rate per kg (Rs.)", rateKg],
@@ -376,8 +386,7 @@ export default function QuotationPage() {
 
   const [header, setHeader] = useState<QuotationHeader>({
     title: "QUOTATION",
-    subtitle: "PE Pipe — Manufactured as per ISO 2081",
-    note: "Effective from Sharaban 01, 2081",
+    address: "",
     date: todayString(),
   });
   const [editingHeaderField, setEditingHeaderField] = useState<keyof QuotationHeader | null>(null);
@@ -491,10 +500,9 @@ export default function QuotationPage() {
   };
 
   const headerFieldLabel: Record<keyof QuotationHeader, string> = {
-    title: "Document Title",
-    subtitle: "Subtitle / Description",
-    note: "Effective Date Note",
-    date: "Quotation Date",
+    title: "Title",
+    address: "Address",
+    date: "Date",
   };
 
   // ─────────────────────────────────────────────────────────────────────────────
@@ -507,8 +515,7 @@ export default function QuotationPage() {
           <FileText className="w-7 h-7 text-blue-200" />
           <div>
             <h1 className="text-xl font-bold tracking-tight">PE Pipe Quotation Maker</h1>
-            <p className="text-blue-300 text-xs mt-0.5">Manufactured as per ISO 2081</p>
-          </div>
+            </div>
         </div>
       </header>
 
@@ -604,9 +611,19 @@ export default function QuotationPage() {
                   onBlur={() => setTimeout(() => setShowFormSizeDrop(false), 150)}
                   autoComplete="off"
                 />
-                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                {form.sizeSearch ? (
+                  <button
+                    type="button"
+                    onMouseDown={(e) => { e.preventDefault(); setForm((f) => ({ ...f, sizeSearch: "", dnLabel: "", pn: "" })); setShowFormSizeDrop(false); }}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                ) : (
+                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                )}
                 {showFormSizeDrop && filteredFormSizes.length > 0 && (
-                  <div className="absolute z-20 top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                  <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-xl max-h-48 overflow-y-auto">
                     {filteredFormSizes.map((s) => (
                       <button
                         key={s}
@@ -640,7 +657,7 @@ export default function QuotationPage() {
                   <ChevronDown className="w-4 h-4 text-slate-400" />
                 </button>
                 {showFormPNDrop && formPNs.length > 0 && (
-                  <div className="absolute z-20 top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden">
+                  <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-xl overflow-hidden">
                     {formPNs.map((pn) => (
                       <button
                         key={pn}
@@ -714,7 +731,7 @@ export default function QuotationPage() {
             </h2>
             <p className="text-xs text-slate-400 mb-4">Click the pencil icon on any row to edit size, PN, or quantity inline.</p>
 
-            <div className="overflow-x-auto">
+            <div className={rowEdit ? "overflow-visible" : "overflow-x-auto"}>
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-slate-200">
@@ -751,6 +768,9 @@ export default function QuotationPage() {
                               }
                               onSelect={(s) =>
                                 setRowEdit((prev) => prev ? { ...prev, sizeSearch: s, selectedDnLabel: s, selectedPn: "", showSizeDrop: false } : prev)
+                              }
+                              onClear={() =>
+                                setRowEdit((s) => s ? { ...s, sizeSearch: "", selectedDnLabel: "", selectedPn: "", showSizeDrop: false } : s)
                               }
                               open={rowEdit.showSizeDrop}
                               onOpen={() => setRowEdit((s) => s ? { ...s, showSizeDrop: true } : s)}
