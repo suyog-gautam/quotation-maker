@@ -438,23 +438,27 @@ function exportExcel(
 
   const ws = XLSX.utils.aoa_to_sheet(aoa);
 
-  // Set formulas for each item row
-  items.forEach((_, i) => {
+  // Set formulas for each item row — include cached `v` so Excel/Sheets shows values immediately
+  const ec = XLSX.utils.encode_cell;
+  let subTotalVal = 0;
+  items.forEach((item, i) => {
     const r = DATA_START_ROW + i;
-    const ec = XLSX.utils.encode_cell;
+    const ratePerM = item.avgWeight * rateKg;
+    const amt = item.quantity * ratePerM;
+    subTotalVal += amt;
     // Rate/m (col D, index 3) = Avg Wt (G{r}) × Rate/kg ($B$RATE_ROW)
-    ws[ec({ r: r - 1, c: 3 })] = { t: "n", f: `G${r}*$B$${RATE_ROW}` };
+    ws[ec({ r: r - 1, c: 3 })] = { t: "n", f: `G${r}*$B$${RATE_ROW}`, v: ratePerM };
     // Amount (col E, index 4) = Qty (C{r}) × Rate/m (D{r})
-    ws[ec({ r: r - 1, c: 4 })] = { t: "n", f: `C${r}*D${r}` };
+    ws[ec({ r: r - 1, c: 4 })] = { t: "n", f: `C${r}*D${r}`, v: amt };
   });
 
-  // Totals in column E
+  // Totals in column E — also include cached values
   if (items.length > 0) {
     const amtRange = `E${DATA_START_ROW}:E${DATA_START_ROW + items.length - 1}`;
-    const ec = XLSX.utils.encode_cell;
-    ws[ec({ r: subTotalRow - 1, c: 4 })] = { t: "n", f: `SUM(${amtRange})` };
-    ws[ec({ r: vatRow - 1, c: 4 })]      = { t: "n", f: `E${subTotalRow}*0.13` };
-    ws[ec({ r: grandRow - 1, c: 4 })]    = { t: "n", f: `E${subTotalRow}+E${vatRow}` };
+    const vatVal = subTotalVal * 0.13;
+    ws[ec({ r: subTotalRow - 1, c: 4 })] = { t: "n", f: `SUM(${amtRange})`,              v: subTotalVal };
+    ws[ec({ r: vatRow - 1,      c: 4 })] = { t: "n", f: `E${subTotalRow}*0.13`,           v: vatVal };
+    ws[ec({ r: grandRow - 1,    c: 4 })] = { t: "n", f: `E${subTotalRow}+E${vatRow}`,     v: subTotalVal + vatVal };
   }
 
   // Column widths
