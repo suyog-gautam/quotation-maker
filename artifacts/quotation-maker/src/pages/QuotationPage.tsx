@@ -327,18 +327,18 @@ function buildPrintHTML(
     .header h1{font-size:24px;font-weight:700;color:#000;letter-spacing:1px}
     .header p{color:#222;margin-top:4px;font-size:12px}
     table{width:100%;border-collapse:collapse;margin-bottom:24px}
-    thead tr{background:#111;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-    th{color:#fff;padding:9px 12px;font-size:11px;font-weight:700;border:1px solid #000}
+    thead tr{background:#fff}
+    th{color:#000;padding:9px 12px;font-size:11px;font-weight:700;border:1.5px solid #000}
     th:first-child{text-align:center;width:44px}
     th:nth-child(2){text-align:left}
     th:not(:first-child):not(:nth-child(2)){text-align:right}
     td{padding:8px 12px;border:1px solid #666;font-size:13px;color:#000}
-    td:first-child{text-align:center;color:#333;font-size:12px}
+    td:first-child{text-align:center;color:#000;font-size:12px;font-weight:600}
     td:not(:first-child):not(:nth-child(2)){text-align:right}
     tr:nth-child(even){background:#efefef;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-    .totals{float:right;width:300px;border:1.5px solid #333;overflow:hidden;margin-bottom:24px}
+    .totals{float:right;width:300px;border:1.5px solid #000;overflow:hidden;margin-bottom:24px}
     .total-row{display:flex;justify-content:space-between;padding:9px 14px;border-bottom:1px solid #555;background:#e8e8e8;font-size:13px;color:#000;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-    .grand{display:flex;justify-content:space-between;padding:11px 14px;background:#111;color:#fff;font-weight:700;font-size:14px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    .grand{display:flex;justify-content:space-between;padding:11px 14px;background:#fff;color:#000;font-weight:700;font-size:14px;border-top:2px solid #000}
     .clearfix::after{content:"";display:table;clear:both}
     @media print{body{padding:18px 24px}}
   </style>
