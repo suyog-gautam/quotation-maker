@@ -1,4 +1,7 @@
 export type PNRating =
+"3 PN"
+| "4 PN"
+| "5 PN"
   | "6 PN"
   | "8 PN"
   | "10 PN"
@@ -14,12 +17,15 @@ export interface PipeSpec {
 }
 
 export const PN_RATINGS: PNRating[] = [
+"3 PN",
+ "4 PN",
+" 5 PN",
   "6 PN",
   "8 PN",
-  "10 PN",
+   "10 PN",
   "12.5 PN",
-  "16 PN",
-  "20 PN",
+   "16 PN",
+   "20 PN",
 ];
 
 export const PIPE_DATA: PipeSpec[] = [
@@ -111,6 +117,8 @@ export const PIPE_DATA: PipeSpec[] = [
     dnMm: 75,
     outsideDia: "75",
     avgWeights: {
+      "3 PN": 0.448,
+      "4 PN": 0.532,
       "5 PN": 0.668,
       "6 PN": 0.821,
       "8 PN": 1.009,
@@ -125,6 +133,8 @@ export const PIPE_DATA: PipeSpec[] = [
     dnMm: 90,
     outsideDia: "90",
     avgWeights: {
+      "3 PN": 0.617,
+      "4 PN": 0.782,
       "5 PN": 0.969,
       "6 PN": 1.165,
       "8 PN": 1.416,
@@ -139,6 +149,8 @@ export const PIPE_DATA: PipeSpec[] = [
     dnMm: 110,
     outsideDia: "110",
     avgWeights: {
+      "3 PN": 0.93,
+      "4 PN": 1.147,
       "5 PN": 1.437,
       "6 PN": 1.766,
       "8 PN": 2.131,
@@ -153,6 +165,8 @@ export const PIPE_DATA: PipeSpec[] = [
     dnMm: 125,
     outsideDia: "125",
     avgWeights: {
+      "3 PN": 1.203,
+      "4 PN": 1.467,
       "5 PN": 1.831,
       "6 PN": 2.257,
       "8 PN": 2.738,
@@ -167,6 +181,8 @@ export const PIPE_DATA: PipeSpec[] = [
     dnMm: 140,
     outsideDia: "140",
     avgWeights: {
+      "3 PN": 1.53,
+      "4 PN": 1.846,
       "5 PN": 2.293,
       "6 PN": 2.826,
       "8 PN": 3.44,
@@ -181,6 +197,8 @@ export const PIPE_DATA: PipeSpec[] = [
     dnMm: 160,
     outsideDia: "160",
     avgWeights: {
+      "3 PN": 1.937,
+      "4 PN": 2.411,
       "5 PN": 3.01,
       "6 PN": 3.706,
       "8 PN": 4.513,
@@ -195,6 +213,8 @@ export const PIPE_DATA: PipeSpec[] = [
     dnMm: 180,
     outsideDia: "180",
     avgWeights: {
+      "3 PN": 2.442,
+      "4 PN": 3.051,
       "5 PN": 3.825,
       "6 PN": 4.657,
       "8 PN": 5.661,
@@ -209,6 +229,8 @@ export const PIPE_DATA: PipeSpec[] = [
     dnMm: 200,
     outsideDia: "200",
     avgWeights: {
+      "3 PN": 3.033,
+      "4 PN": 3.738,
       "5 PN": 4.682,
       "6 PN": 5.77,
       "8 PN": 6.992,
@@ -219,6 +241,7 @@ export const PIPE_DATA: PipeSpec[] = [
     },
   },
 ];
+
 
 export function getAvgWeight(
   dnLabel: string,
