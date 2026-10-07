@@ -1,6 +1,8 @@
 import {
-  AlignmentType, BorderStyle, Document, LevelFormat, Packer, PageBreak, Paragraph,
-  Table, TableCell, TableRow, TextRun, VerticalAlign, VerticalMergeType, WidthType,
+  AlignmentType, BorderStyle, Document, Header, HorizontalPositionAlign, HorizontalPositionRelativeFrom,
+  ImageRun, LevelFormat, Packer, PageBreak, Paragraph, Table, TableCell, TableRow, TextRun,
+  TextWrappingType, VerticalAlign, VerticalMergeType, VerticalPositionAlign, VerticalPositionRelativeFrom,
+  WidthType,
 } from "docx";
 import { buildRows, requirementsFor, type Observed, type ReportRow } from "@/data/ns40";
 
@@ -28,7 +30,8 @@ export interface ReportPipe {
   observed: Observed;
 }
 
-export const SAMPLE_STAMP = "SAMPLE – NOT ACTUAL TEST RESULTS";
+export const WATERMARK = "SAMPLE";
+const WM_ALPHA = 0.16;
 
 // Page geometry – A4 with room for the Ashirwad letterhead (logo band on top,
 // address band at the bottom). Same values as Test_Report_Lamjung.docx.
@@ -60,8 +63,8 @@ export function pagesFor(pipes: ReportPipe[]): PageData[] {
 }
 
 export function displayTitle(h: ReportHeader, sample: boolean) {
-  const t = h.title.trim() || "Test Report of HDPE Pipes";
-  return sample && !/^sample\b/i.test(t) ? `Sample ${t}` : t;
+  void sample;
+  return h.title.trim() || "Test Report of HDPE Pipes";
 }
 
 function detailLines(h: ReportHeader, p: PageData): { label: string; value: string; bold: boolean }[] {
@@ -105,9 +108,8 @@ export function buildReportHTML(
       </tr>`).join("");
     return `
     <section class="page${i < pages.length - 1 ? " brk" : ""}">
-      ${sample ? `<div class="wm">SAMPLE</div>` : ""}
+      ${sample ? `<div class="wm">${WATERMARK}</div>` : ""}
       <h1>${title}</h1>
-      ${sample ? `<p class="stamp">${SAMPLE_STAMP}</p>` : ""}
       <p class="date">Date: ${esc(h.date)}</p>
       <ul>${lines}</ul>
       <table>
@@ -116,7 +118,6 @@ export function buildReportHTML(
         <tbody>${rows}</tbody>
       </table>
       <p class="lab">${esc(h.labName)}</p>
-      ${sample ? `<p class="stamp small">${SAMPLE_STAMP}</p>` : ""}
     </section>`;
   }).join("");
 
@@ -129,8 +130,6 @@ export function buildReportHTML(
     .page{position:relative;${screen ? `width:210mm;min-height:297mm;margin:0 auto 16px;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.2);padding:${PAGE.topMm}mm ${PAGE.sideMm}mm ${PAGE.bottomMm}mm` : ""}}
     .brk{break-after:page;page-break-after:always}
     h1{text-align:center;font-size:14pt;margin:0 0 4pt}
-    .stamp{text-align:center;color:#c00000;font-weight:700;margin:0 0 6pt;letter-spacing:.3px}
-    .stamp.small{font-size:9pt;text-align:right;margin-top:4pt}
     .date{text-align:right;margin:14pt 0 14pt}
     ul{margin:0 0 14pt;padding-left:36pt}
     li{margin:0 0 1pt}
@@ -143,9 +142,8 @@ export function buildReportHTML(
     td.m{vertical-align:middle;font-size:8.5pt}
     td.bad{color:#c00000;font-weight:700}
     .lab{text-align:right;margin-top:28pt}
-    .wm{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:120pt;font-weight:800;color:rgba(192,0,0,.08);transform:rotate(-35deg);pointer-events:none;z-index:0}
-    h1,ul,table,p{position:relative;z-index:1}
-    @media print{.page{padding:0;box-shadow:none;margin:0;width:auto;min-height:0}.wm{position:fixed}}
+    .wm{position:absolute;left:0;right:0;top:50%;text-align:center;font-size:150pt;font-weight:800;line-height:1;color:rgba(192,0,0,${WM_ALPHA});transform:translateY(-50%) rotate(-40deg);pointer-events:none;z-index:2;letter-spacing:6pt}
+    @media print{.page{padding:0;box-shadow:none;margin:0;width:auto;min-height:0}.wm{position:fixed;top:50%}}
   </style></head><body>
   ${pages.length ? body : `<p style="text-align:center;color:#64748b;font-family:sans-serif">Choose a pipe size and pressure to see the report.</p>`}
   ${opts.print
@@ -185,15 +183,9 @@ function pageChildren(h: ReportHeader, p: PageData, sample: boolean, first: bool
   const kids: (Paragraph | Table)[] = [];
   kids.push(new Paragraph({
     alignment: AlignmentType.CENTER,
-    spacing: { after: sample ? 60 : 160 },
+    spacing: { after: 160 },
     children: [...(first ? [] : [new PageBreak()]), run(displayTitle(h, sample), { bold: true, size: 28 })],
   }));
-  if (sample) {
-    kids.push(new Paragraph({
-      alignment: AlignmentType.CENTER, spacing: { after: 120 },
-      children: [run(SAMPLE_STAMP, { bold: true, color: "C00000" })],
-    }));
-  }
   kids.push(new Paragraph({
     alignment: AlignmentType.RIGHT, spacing: { before: 200, after: 280 },
     children: [run(`Date: ${h.date}`)],
@@ -232,17 +224,46 @@ function pageChildren(h: ReportHeader, p: PageData, sample: boolean, first: bool
     alignment: AlignmentType.RIGHT, spacing: { before: 560 },
     children: [run(h.labName)],
   }));
-  if (sample) {
-    kids.push(new Paragraph({
-      alignment: AlignmentType.RIGHT, spacing: { before: 80 },
-      children: [run(SAMPLE_STAMP, { bold: true, color: "C00000", size: 18 })],
-    }));
-  }
   return kids;
+}
+
+/** Draw the diagonal SAMPLE watermark to a transparent PNG (browser canvas). */
+async function watermarkPng(): Promise<ArrayBuffer> {
+  const W = 1600, H = 2263; // A4 aspect
+  const c = document.createElement("canvas");
+  c.width = W; c.height = H;
+  const g = c.getContext("2d")!;
+  g.translate(W / 2, H / 2);
+  g.rotate((-40 * Math.PI) / 180);
+  g.fillStyle = `rgba(192,0,0,${WM_ALPHA})`;
+  g.font = "800 420px Calibri, Carlito, Arial, sans-serif";
+  g.textAlign = "center"; g.textBaseline = "middle";
+  g.fillText(WATERMARK, 0, 0);
+  const blob: Blob = await new Promise((res) => c.toBlob((b) => res(b!), "image/png"));
+  return blob.arrayBuffer();
 }
 
 export async function buildReportDocx(h: ReportHeader, pipes: ReportPipe[], sample: boolean): Promise<Blob> {
   const pages = pagesFor(pipes);
+  const wm = sample ? await watermarkPng() : null;
+  const headers = wm ? {
+    default: new Header({
+      children: [new Paragraph({
+        children: [new ImageRun({
+          type: "png",
+          data: wm,
+          transformation: { width: 794, height: 1123 }, // full A4 page in px @96dpi
+          floating: {
+            horizontalPosition: { relative: HorizontalPositionRelativeFrom.PAGE, align: HorizontalPositionAlign.CENTER },
+            verticalPosition: { relative: VerticalPositionRelativeFrom.PAGE, align: VerticalPositionAlign.CENTER },
+            behindDocument: true,
+            allowOverlap: true,
+            wrap: { type: TextWrappingType.NONE },
+          },
+        })],
+      })],
+    }),
+  } : undefined;
   const doc = new Document({
     creator: h.labName,
     title: displayTitle(h, sample),
@@ -266,6 +287,7 @@ export async function buildReportDocx(h: ReportHeader, pipes: ReportPipe[], samp
           },
         },
       },
+      headers,
       children: pages.flatMap((p, i) => pageChildren(h, p, sample, i === 0)),
     }],
   });

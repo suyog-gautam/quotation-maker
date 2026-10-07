@@ -9,7 +9,7 @@ import {
   type Observed, type Status,
 } from "@/data/ns40";
 import {
-  SAMPLE_STAMP, buildReportDocx, buildReportHTML, downloadBlob, pagesFor,
+  buildReportDocx, buildReportHTML, downloadBlob, pagesFor,
   type ReportHeader, type ReportPipe,
 } from "@/lib/reportExport";
 import { useToast } from "@/hooks/use-toast";
@@ -212,7 +212,7 @@ export default function TestReportPage() {
               </div>
               <p className="text-xs text-slate-600 mt-1">
                 {sample
-                  ? <>Observed values are auto-filled with example numbers inside the NS limits. Every page and download is titled “Sample …” and stamped <b className="text-red-700">{SAMPLE_STAMP}</b>. Turning sample mode off clears these values.</>
+                  ? <>Observed values are auto-filled with example numbers inside the NS limits. Every page of the PDF and Word file carries a large diagonal <b className="text-red-700">SAMPLE</b> watermark. Turning sample mode off clears these values.</>
                   : "Off: enter the values measured by the lab. Status is checked against NS 40 automatically."}
               </p>
             </div>

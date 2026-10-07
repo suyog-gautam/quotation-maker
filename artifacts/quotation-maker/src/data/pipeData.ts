@@ -1,3 +1,5 @@
+import { NS40_TABLE, PE100_PN_SDR, pnNumber } from "./ns40";
+
 export type PNRating =
 "3 PN"
 | "4 PN"
@@ -19,7 +21,7 @@ export interface PipeSpec {
 export const PN_RATINGS: PNRating[] = [
 "3 PN",
  "4 PN",
-" 5 PN",
+"5 PN",
   "6 PN",
   "8 PN",
    "10 PN",
@@ -28,7 +30,8 @@ export const PN_RATINGS: PNRating[] = [
    "20 PN",
 ];
 
-export const PIPE_DATA: PipeSpec[] = [
+// Sizes up to 200 mm: existing average weights (kg/m), unchanged.
+const BASE_PIPE_DATA: PipeSpec[] = [
   {
     dnLabel: "16mm",
     dnMm: 16,
@@ -242,6 +245,43 @@ export const PIPE_DATA: PipeSpec[] = [
   },
 ];
 
+
+// ─── Sizes above 200 mm (225–400 mm) ──────────────────────────────────────────
+// Average weight = (min weight + max weight) / 2, from NS 40:2079 dimensions:
+//   min weight = π × (dem,min − eMin) × eMin × ρ / 1000   (kg/m)
+//   max weight = π × (dem,max − eMax) × eMax × ρ / 1000   (kg/m)
+// dem = mean outside diameter (Table 3), e = wall thickness for the PN's SDR (Table 4).
+// ρ = 0.95 g/cm³ reproduces the existing ≤200 mm table to within ~0.1 % on average.
+
+const PE_DENSITY = 0.95; // g/cm³
+
+function pipeWeightKgPerM(od: number, wall: number): number {
+  return (Math.PI * (od - wall) * wall * PE_DENSITY) / 1000;
+}
+
+function nsAverageWeight(dnMm: number, pn: PNRating): number | undefined {
+  const size = NS40_TABLE[dnMm];
+  const sdr = PE100_PN_SDR[String(pnNumber(pn))];
+  const wall = size && sdr ? size.wall[String(sdr)] : undefined;
+  if (!size || !wall) return undefined;
+  const minWt = pipeWeightKgPerM(size.od[0], wall[0]);
+  const maxWt = pipeWeightKgPerM(size.od[1], wall[1]);
+  return Math.round(((minWt + maxWt) / 2) * 1000) / 1000;
+}
+
+const ALL_PNS: PNRating[] = ["3 PN", "4 PN", "5 PN", "6 PN", "8 PN", "10 PN", "12.5 PN", "16 PN", "20 PN"];
+const LARGE_SIZES_MM = [225, 250, 280, 315, 355, 400];
+
+const LARGE_PIPE_DATA: PipeSpec[] = LARGE_SIZES_MM.map((dn) => {
+  const avgWeights: Partial<Record<PNRating, number>> = {};
+  for (const pn of ALL_PNS) {
+    const w = nsAverageWeight(dn, pn);
+    if (w !== undefined) avgWeights[pn] = w;
+  }
+  return { dnLabel: `${dn}mm`, dnMm: dn, outsideDia: String(dn), avgWeights };
+});
+
+export const PIPE_DATA: PipeSpec[] = [...BASE_PIPE_DATA, ...LARGE_PIPE_DATA];
 
 export function getAvgWeight(
   dnLabel: string,
