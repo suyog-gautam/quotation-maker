@@ -1,8 +1,6 @@
 import {
-  AlignmentType, BorderStyle, Document, Header, HorizontalPositionAlign, HorizontalPositionRelativeFrom,
-  ImageRun, LevelFormat, Packer, PageBreak, Paragraph, Table, TableCell, TableRow, TextRun,
-  TextWrappingType, VerticalAlign, VerticalMergeType, VerticalPositionAlign, VerticalPositionRelativeFrom,
-  WidthType,
+  AlignmentType, BorderStyle, Document, LevelFormat, Packer, PageBreak, Paragraph,
+  Table, TableCell, TableRow, TextRun, VerticalAlign, VerticalMergeType, WidthType,
 } from "docx";
 import { buildRows, requirementsFor, type Observed, type ReportRow } from "@/data/ns40";
 
@@ -63,8 +61,8 @@ export function pagesFor(pipes: ReportPipe[]): PageData[] {
 }
 
 export function displayTitle(h: ReportHeader, sample: boolean) {
-  void sample;
-  return h.title.trim() || "Test Report of HDPE Pipes";
+  const t = h.title.trim() || "Test Report of HDPE Pipes";
+  return sample && !/^sample\b/i.test(t) ? `Sample ${t}` : t;
 }
 
 function detailLines(h: ReportHeader, p: PageData): { label: string; value: string; bold: boolean }[] {
@@ -227,43 +225,8 @@ function pageChildren(h: ReportHeader, p: PageData, sample: boolean, first: bool
   return kids;
 }
 
-/** Draw the diagonal SAMPLE watermark to a transparent PNG (browser canvas). */
-async function watermarkPng(): Promise<ArrayBuffer> {
-  const W = 1600, H = 2263; // A4 aspect
-  const c = document.createElement("canvas");
-  c.width = W; c.height = H;
-  const g = c.getContext("2d")!;
-  g.translate(W / 2, H / 2);
-  g.rotate((-40 * Math.PI) / 180);
-  g.fillStyle = `rgba(192,0,0,${WM_ALPHA})`;
-  g.font = "800 420px Calibri, Carlito, Arial, sans-serif";
-  g.textAlign = "center"; g.textBaseline = "middle";
-  g.fillText(WATERMARK, 0, 0);
-  const blob: Blob = await new Promise((res) => c.toBlob((b) => res(b!), "image/png"));
-  return blob.arrayBuffer();
-}
-
 export async function buildReportDocx(h: ReportHeader, pipes: ReportPipe[], sample: boolean): Promise<Blob> {
   const pages = pagesFor(pipes);
-  const wm = sample ? await watermarkPng() : null;
-  const headers = wm ? {
-    default: new Header({
-      children: [new Paragraph({
-        children: [new ImageRun({
-          type: "png",
-          data: wm,
-          transformation: { width: 794, height: 1123 }, // full A4 page in px @96dpi
-          floating: {
-            horizontalPosition: { relative: HorizontalPositionRelativeFrom.PAGE, align: HorizontalPositionAlign.CENTER },
-            verticalPosition: { relative: VerticalPositionRelativeFrom.PAGE, align: VerticalPositionAlign.CENTER },
-            behindDocument: true,
-            allowOverlap: true,
-            wrap: { type: TextWrappingType.NONE },
-          },
-        })],
-      })],
-    }),
-  } : undefined;
   const doc = new Document({
     creator: h.labName,
     title: displayTitle(h, sample),
@@ -287,7 +250,6 @@ export async function buildReportDocx(h: ReportHeader, pipes: ReportPipe[], samp
           },
         },
       },
-      headers,
       children: pages.flatMap((p, i) => pageChildren(h, p, sample, i === 0)),
     }],
   });

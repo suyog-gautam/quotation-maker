@@ -248,10 +248,10 @@ const BASE_PIPE_DATA: PipeSpec[] = [
 
 // ─── Sizes above 200 mm (225–400 mm) ──────────────────────────────────────────
 // Average weight = (min weight + max weight) / 2, from NS 40:2079 dimensions:
-//   min weight = π × (dem,min − eMin) × eMin × ρ / 1000   (kg/m)
-//   max weight = π × (dem,max − eMax) × eMax × ρ / 1000   (kg/m)
-// dem = mean outside diameter (Table 3), e = wall thickness for the PN's SDR (Table 4).
-// ρ = 0.95 g/cm³ reproduces the existing ≤200 mm table to within ~0.1 % on average.
+//   min weight = π × eMin × (dn − eMin) × ρ / 1000   (kg/m)
+//   max weight = π × eMax × (dn − eMax) × ρ / 1000   (kg/m)
+// dn = nominal outside diameter, e = wall thickness for the PN's SDR (Table 4),
+// ρ = 0.95 g/cm³ (950 kg/m³).
 
 const PE_DENSITY = 0.95; // g/cm³
 
@@ -264,8 +264,8 @@ function nsAverageWeight(dnMm: number, pn: PNRating): number | undefined {
   const sdr = PE100_PN_SDR[String(pnNumber(pn))];
   const wall = size && sdr ? size.wall[String(sdr)] : undefined;
   if (!size || !wall) return undefined;
-  const minWt = pipeWeightKgPerM(size.od[0], wall[0]);
-  const maxWt = pipeWeightKgPerM(size.od[1], wall[1]);
+  const minWt = pipeWeightKgPerM(dnMm, wall[0]);
+  const maxWt = pipeWeightKgPerM(dnMm, wall[1]);
   return Math.round(((minWt + maxWt) / 2) * 1000) / 1000;
 }
 

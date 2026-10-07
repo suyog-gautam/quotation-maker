@@ -212,7 +212,7 @@ export default function TestReportPage() {
               </div>
               <p className="text-xs text-slate-600 mt-1">
                 {sample
-                  ? <>Observed values are auto-filled with example numbers inside the NS limits. Every page of the PDF and Word file carries a large diagonal <b className="text-red-700">SAMPLE</b> watermark. Turning sample mode off clears these values.</>
+                  ? <>Observed values are auto-filled with example numbers inside the NS limits. The heading becomes <b className="text-red-700">“Sample …”</b> in the PDF and Word file, and the PDF also carries a diagonal SAMPLE watermark. Turning sample mode off clears these values.</>
                   : "Off: enter the values measured by the lab. Status is checked against NS 40 automatically."}
               </p>
             </div>
